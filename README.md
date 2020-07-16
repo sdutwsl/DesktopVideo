@@ -1,18 +1,15 @@
 # DesktopVideo
-桌面视频播放器
+桌面视频壁纸播放器
+A video player that can make you wallpaper as video
 
-可以将某个视频设置为桌面壁纸
 渲染使用了vlc
+Video rendering with libvlc(C)
 
-开发的话 当初写的很乱 客户端使用C# 编写 就是根目录下的sln
-服务端是根目录下的DesktopVideoSev文件夹 Win32程序
 
-## 客户端开发
-需要将编译好的服务端放入Debug目录下的sev文件夹 客户端才能正常进行调试
+It may be difficult to develop this program,you should open .sln file with Visual Studio,then you will see two project in the solution.
+The UI client program written in C# is a Windows From Application.
+The main controll program as server is a Windows Console Program via C++.You should add the sdk/lib dir and sdk/include dir to your C++ compile settings so that you can compile it correctly.And also you should copy plugin dir and other two dlls to you Output dir so that the server can run.
+The client control server's life time,make the two projects Output dir to be the same.
+Then start client,program can run.
 
-## 服务端开发
-请将sdk中的include文件夹放入编译头文件目录
-请将sdk中的lib文件夹放入链接库目录
-方可正确编译
-
-不过我估计这玩意儿也没人开发 毕竟我自己也懒得开发 整个release玩玩就好
+if you just want to use it,go release.
