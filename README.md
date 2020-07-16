@@ -8,7 +8,10 @@ A video player that can make you wallpaper as video
 Video rendering with libvlc(C)
 
 
+
 It may be difficult to develop this program,you should open .sln file with Visual Studio,then you will see two project in the solution.
+
+You should first download libvlc source and lib/dll.
 
 The UI client program written in C# is a Windows From Application.
 
