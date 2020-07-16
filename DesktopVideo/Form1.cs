@@ -13,6 +13,7 @@ namespace DesktopVideo
         public Socket sockClient;
         private bool isMute = false;
         private bool isPlay = false;
+        private int port = 1997;
 
 
         public FormMain()
@@ -22,7 +23,6 @@ namespace DesktopVideo
             //在这里初始化套接字
             try
             {
-                int port = 1997;
                 string host = "127.0.0.1";
                 IPAddress ip = IPAddress.Parse(host);
                 IPEndPoint ipe = new IPEndPoint(ip, port);
