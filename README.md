@@ -1,8 +1,10 @@
 # DesktopVideo
 桌面视频壁纸播放器
+
 A video player that can make you wallpaper as video
 
 渲染使用了vlc
+
 Video rendering with libvlc(C)
 
 
@@ -17,4 +19,4 @@ The client control server's life time,make the two projects Output dir to be the
 
 Then start client,program can run.
 
-# If you just want to use it,go release.
+If you just want to use it,go release.
