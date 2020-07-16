@@ -1,6 +1,4 @@
-#include "stdafx.h"
 #include "CVideoPlayer.h"
-
 
 CVideoPlayer::CVideoPlayer() :pVLCInstance(0), pVLCMedia(0), pVLCPlayer(0)
 {
@@ -11,6 +9,7 @@ CVideoPlayer::CVideoPlayer() :pVLCInstance(0), pVLCMedia(0), pVLCPlayer(0)
 
 	pVLCInstance = libvlc_new(0, 0);
 	pVLCPlayer = libvlc_media_player_new(pVLCInstance);
+
 }
 
 

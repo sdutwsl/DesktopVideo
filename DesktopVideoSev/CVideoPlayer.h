@@ -36,7 +36,12 @@ public:
 	void Mute(bool = true);
 	bool GetMute();
 
+	//end reach callback
+	int SetEndCallback(void(*func)(const struct libvlc_event_t* p_event, void* p_data))
+	{
+		return libvlc_event_attach(libvlc_media_player_event_manager(pVLCPlayer), libvlc_MediaPlayerEndReached, func, 0);	
+	}
+
 	//hwnd
 	void SetWindow(void *);
-
 };

@@ -184,7 +184,7 @@
             // 
             this.notifyIcon.ContextMenuStrip = this.contextMenu;
             this.notifyIcon.Icon = ((System.Drawing.Icon)(resources.GetObject("notifyIcon.Icon")));
-            this.notifyIcon.Text = "notifyIcon";
+            this.notifyIcon.Text = "桌面壁纸视频播放器";
             this.notifyIcon.Visible = true;
             // 
             // contextMenu
@@ -207,12 +207,12 @@
             this.toolStripMenuItem4,
             this.退出程序ToolStripMenuItem});
             this.contextMenu.Name = "contextMenu";
-            this.contextMenu.Size = new System.Drawing.Size(312, 567);
+            this.contextMenu.Size = new System.Drawing.Size(312, 534);
             // 
             // 打开ToolStripMenuItem
             // 
             this.打开ToolStripMenuItem.Name = "打开ToolStripMenuItem";
-            this.打开ToolStripMenuItem.Size = new System.Drawing.Size(311, 44);
+            this.打开ToolStripMenuItem.Size = new System.Drawing.Size(311, 46);
             this.打开ToolStripMenuItem.Text = "打开(&O)";
             this.打开ToolStripMenuItem.Click += new System.EventHandler(this.打开ToolStripMenuItem_Click);
             // 
@@ -224,28 +224,28 @@
             // 播放暂停ToolStripMenuItem
             // 
             this.播放暂停ToolStripMenuItem.Name = "播放暂停ToolStripMenuItem";
-            this.播放暂停ToolStripMenuItem.Size = new System.Drawing.Size(311, 44);
+            this.播放暂停ToolStripMenuItem.Size = new System.Drawing.Size(311, 46);
             this.播放暂停ToolStripMenuItem.Text = "播放/暂停(&P)";
             this.播放暂停ToolStripMenuItem.Click += new System.EventHandler(this.播放暂停ToolStripMenuItem_Click);
             // 
             // 快进ToolStripMenuItem
             // 
             this.快进ToolStripMenuItem.Name = "快进ToolStripMenuItem";
-            this.快进ToolStripMenuItem.Size = new System.Drawing.Size(311, 44);
+            this.快进ToolStripMenuItem.Size = new System.Drawing.Size(311, 46);
             this.快进ToolStripMenuItem.Text = "快进(&F)";
             this.快进ToolStripMenuItem.Click += new System.EventHandler(this.快进ToolStripMenuItem_Click);
             // 
             // 快退ToolStripMenuItem
             // 
             this.快退ToolStripMenuItem.Name = "快退ToolStripMenuItem";
-            this.快退ToolStripMenuItem.Size = new System.Drawing.Size(311, 44);
+            this.快退ToolStripMenuItem.Size = new System.Drawing.Size(311, 46);
             this.快退ToolStripMenuItem.Text = "快退(&B)";
             this.快退ToolStripMenuItem.Click += new System.EventHandler(this.快退ToolStripMenuItem_Click);
             // 
             // 停止播放EToolStripMenuItem
             // 
             this.停止播放EToolStripMenuItem.Name = "停止播放EToolStripMenuItem";
-            this.停止播放EToolStripMenuItem.Size = new System.Drawing.Size(311, 44);
+            this.停止播放EToolStripMenuItem.Size = new System.Drawing.Size(311, 46);
             this.停止播放EToolStripMenuItem.Text = "停止播放(&E)";
             this.停止播放EToolStripMenuItem.Click += new System.EventHandler(this.停止播放EToolStripMenuItem_Click);
             // 
@@ -257,21 +257,21 @@
             // 增大音量ToolStripMenuItem
             // 
             this.增大音量ToolStripMenuItem.Name = "增大音量ToolStripMenuItem";
-            this.增大音量ToolStripMenuItem.Size = new System.Drawing.Size(311, 44);
+            this.增大音量ToolStripMenuItem.Size = new System.Drawing.Size(311, 46);
             this.增大音量ToolStripMenuItem.Text = "增大音量(&U)";
             this.增大音量ToolStripMenuItem.Click += new System.EventHandler(this.增大音量ToolStripMenuItem_Click);
             // 
             // 减小音量ToolStripMenuItem
             // 
             this.减小音量ToolStripMenuItem.Name = "减小音量ToolStripMenuItem";
-            this.减小音量ToolStripMenuItem.Size = new System.Drawing.Size(311, 44);
+            this.减小音量ToolStripMenuItem.Size = new System.Drawing.Size(311, 46);
             this.减小音量ToolStripMenuItem.Text = "减小音量(&D)";
             this.减小音量ToolStripMenuItem.Click += new System.EventHandler(this.减小音量ToolStripMenuItem_Click);
             // 
             // 静音取消ToolStripMenuItem
             // 
             this.静音取消ToolStripMenuItem.Name = "静音取消ToolStripMenuItem";
-            this.静音取消ToolStripMenuItem.Size = new System.Drawing.Size(311, 44);
+            this.静音取消ToolStripMenuItem.Size = new System.Drawing.Size(311, 46);
             this.静音取消ToolStripMenuItem.Text = "静音/取消(&M)";
             this.静音取消ToolStripMenuItem.Click += new System.EventHandler(this.静音取消ToolStripMenuItem_Click);
             // 
@@ -283,14 +283,14 @@
             // 还原壁纸RToolStripMenuItem
             // 
             this.还原壁纸RToolStripMenuItem.Name = "还原壁纸RToolStripMenuItem";
-            this.还原壁纸RToolStripMenuItem.Size = new System.Drawing.Size(311, 44);
+            this.还原壁纸RToolStripMenuItem.Size = new System.Drawing.Size(311, 46);
             this.还原壁纸RToolStripMenuItem.Text = "还原壁纸(&R)";
             this.还原壁纸RToolStripMenuItem.Click += new System.EventHandler(this.还原壁纸RToolStripMenuItem_Click);
             // 
             // 控制面板ToolStripMenuItem
             // 
             this.控制面板ToolStripMenuItem.Name = "控制面板ToolStripMenuItem";
-            this.控制面板ToolStripMenuItem.Size = new System.Drawing.Size(311, 44);
+            this.控制面板ToolStripMenuItem.Size = new System.Drawing.Size(311, 46);
             this.控制面板ToolStripMenuItem.Text = "显示控制面板(&S)";
             this.控制面板ToolStripMenuItem.Click += new System.EventHandler(this.控制面板ToolStripMenuItem_Click);
             // 
@@ -302,7 +302,7 @@
             // 退出程序ToolStripMenuItem
             // 
             this.退出程序ToolStripMenuItem.Name = "退出程序ToolStripMenuItem";
-            this.退出程序ToolStripMenuItem.Size = new System.Drawing.Size(311, 44);
+            this.退出程序ToolStripMenuItem.Size = new System.Drawing.Size(311, 46);
             this.退出程序ToolStripMenuItem.Text = "退出程序(&H)";
             this.退出程序ToolStripMenuItem.Click += new System.EventHandler(this.退出程序ToolStripMenuItem_Click);
             // 

@@ -17,7 +17,7 @@ namespace DesktopVideo
             //在这里启动服务端ProcessStartInfo procInfo = new ProcessStartInfo();
             Process proc;
             ProcessStartInfo procInfo = new ProcessStartInfo();
-            procInfo.FileName = "sev\\DesktopVideoSev.exe";
+            procInfo.FileName = "DesktopVideoSev.exe";
             procInfo.Arguments = "sstart";
             procInfo.WindowStyle = ProcessWindowStyle.Hidden;
             proc = Process.Start(procInfo);
