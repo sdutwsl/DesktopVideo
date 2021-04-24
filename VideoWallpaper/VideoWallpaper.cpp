@@ -4,8 +4,12 @@
 #include "framework.h"
 #include "VideoWallpaper.h"
 
-#define MAX_LOADSTRING 100
+#include <shellapi.h>
 
+#define MAX_LOADSTRING 100
+UINT const WMAPP_NOTIFYCALLBACK = WM_APP + 1;
+void CreateNotifyIcon(HWND);
+void ShowContextMenu(HWND,POINT);
 // 全局变量:
 HINSTANCE hInst;                                // 当前实例
 WCHAR szTitle[MAX_LOADSTRING];                  // 标题栏文本
@@ -105,7 +109,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
       return FALSE;
    }
 
-   ShowWindow(hWnd, nCmdShow);
+   ShowWindow(hWnd, SW_HIDE);
    UpdateWindow(hWnd);
 
    return TRUE;
@@ -125,6 +129,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
     {
+    case WM_CREATE:
+        CreateNotifyIcon(hWnd);
+        break;
+    case WMAPP_NOTIFYCALLBACK:
+        switch (LOWORD(lParam))
+        {
+        case WM_RBUTTONDOWN:
+        {
+            POINT pt;
+            GetCursorPos(&pt);
+            ShowContextMenu(hWnd, pt);
+        }
+        break;
+        }
+        break;
     case WM_COMMAND:
         {
             int wmId = LOWORD(wParam);
@@ -178,3 +197,57 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
     }
     return (INT_PTR)FALSE;
 }
+
+void CreateNotifyIcon(HWND hWnd) {
+    // Declare NOTIFYICONDATA details. 
+    // Error handling is omitted here for brevity. Do not omit it in your code.
+
+    NOTIFYICONDATA nid = {};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = hWnd;
+    nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP | NIF_GUID;
+
+    static const GUID myGUID =
+    { 0x23977b55, 0x10e0, 0x4041, {0xb8, 0x62, 0xbf, 0x95, 0x41, 0x96, 0x36, 0x69} };
+    nid.guidItem = myGUID;
+    nid.uCallbackMessage = WMAPP_NOTIFYCALLBACK;
+    nid.hIcon= LoadIcon(hInst, MAKEINTRESOURCE(IDI_VIDEOWALLPAPER));
+    if (nid.hIcon == NULL) {
+        MessageBox(hWnd, _TEXT("LoadIcon"), _TEXT("Error") , MB_OK);
+        exit(0);
+    }
+    // Show the notification.
+    if (!Shell_NotifyIcon(NIM_ADD, &nid)) {
+        MessageBox(hWnd, _TEXT("Shell_NotifyIcon"), _TEXT("Error"), MB_OK);
+        exit(0);
+    }
+}
+
+void ShowContextMenu(HWND hwnd, POINT pt)
+{
+    HMENU hMenu = LoadMenu(hInst, MAKEINTRESOURCE(IDC_CONTEXTMENU));
+    if (hMenu)
+    {
+        HMENU hSubMenu = GetSubMenu(hMenu, 0);
+        if (hSubMenu)
+        {
+            // our window must be foreground before calling TrackPopupMenu or the menu will not disappear when the user clicks away
+            SetForegroundWindow(hwnd);
+
+            // respect menu drop alignment
+            UINT uFlags = TPM_RIGHTBUTTON;
+            if (GetSystemMetrics(SM_MENUDROPALIGNMENT) != 0)
+            {
+                uFlags |= TPM_RIGHTALIGN;
+            }
+            else
+            {
+                uFlags |= TPM_LEFTALIGN;
+            }
+
+            TrackPopupMenuEx(hSubMenu, uFlags, pt.x, pt.y, hwnd, NULL);
+        }
+        DestroyMenu(hMenu);
+    }
+}
+
