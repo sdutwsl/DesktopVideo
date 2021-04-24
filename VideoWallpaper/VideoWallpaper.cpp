@@ -4,11 +4,13 @@
 #include "framework.h"
 #include "VideoWallpaper.h"
 
+#include "CDVTools.h"
+
 #include <shellapi.h>
 
 #define MAX_LOADSTRING 100
 UINT const WMAPP_NOTIFYCALLBACK = WM_APP + 1;
-void CreateNotifyIcon(HWND);
+void CreateNotifyIcon(HWND,BOOL);
 void ShowContextMenu(HWND,POINT);
 // 全局变量:
 HINSTANCE hInst;                                // 当前实例
@@ -130,7 +132,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     switch (message)
     {
     case WM_CREATE:
-        CreateNotifyIcon(hWnd);
+        CreateNotifyIcon(hWnd, true);
         break;
     case WMAPP_NOTIFYCALLBACK:
         switch (LOWORD(lParam))
@@ -156,6 +158,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             case IDM_EXIT:
                 DestroyWindow(hWnd);
                 break;
+
+            case ID_MENU_EXIT:
+                //CreateNotifyIcon(hWnd,false);
+                    //exit(0);
+                CDVTools::GetAllDisplays();
+                    break;
             default:
                 return DefWindowProc(hWnd, message, wParam, lParam);
             }
@@ -198,7 +206,7 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
     return (INT_PTR)FALSE;
 }
 
-void CreateNotifyIcon(HWND hWnd) {
+void CreateNotifyIcon(HWND hWnd,BOOL bRemove) {
     // Declare NOTIFYICONDATA details. 
     // Error handling is omitted here for brevity. Do not omit it in your code.
 
@@ -208,7 +216,7 @@ void CreateNotifyIcon(HWND hWnd) {
     nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP | NIF_GUID;
 
     static const GUID myGUID =
-    { 0x23977b55, 0x10e0, 0x4041, {0xb8, 0x62, 0xbf, 0x95, 0x41, 0x96, 0x36, 0x69} };
+    { 0x23977b55, 0x10e0, 0x4041, {0xb8, 0x62, 0xbf, 0x15, 0x41, 0x96, 0x36, 0x69} };
     nid.guidItem = myGUID;
     nid.uCallbackMessage = WMAPP_NOTIFYCALLBACK;
     nid.hIcon= LoadIcon(hInst, MAKEINTRESOURCE(IDI_VIDEOWALLPAPER));
@@ -217,9 +225,9 @@ void CreateNotifyIcon(HWND hWnd) {
         exit(0);
     }
     // Show the notification.
-    if (!Shell_NotifyIcon(NIM_ADD, &nid)) {
+    if (!Shell_NotifyIcon(bRemove?NIM_ADD:NIM_DELETE, &nid)) {
         MessageBox(hWnd, _TEXT("Shell_NotifyIcon"), _TEXT("Error"), MB_OK);
-        exit(0);
+        //exit(0);
     }
 }
 
