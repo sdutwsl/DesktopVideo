@@ -1,0 +1,36 @@
+#pragma once
+
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace vw {
+
+class VlcPlayer;
+
+struct MonitorInfo {
+    std::string id;     // stable name: "\\.\DISPLAY1" on Windows, connector name ("DP-1") on Wayland
+    int x = 0, y = 0;   // logical position in the virtual desktop
+    int width = 0, height = 0;
+    bool primary = false;   // the one that gets audio
+};
+
+// A render target covering exactly one monitor, placed below the desktop icons.
+// Created by the platform layer; the core only ever talks to it through this interface.
+class Surface {
+public:
+    virtual ~Surface() = default;
+    virtual const MonitorInfo& monitor() const = 0;
+    // Route the player's video output into this surface (native window handle or frame sink).
+    virtual void attach(VlcPlayer& player) = 0;
+};
+
+// Everything the core needs from the OS.
+class Platform {
+public:
+    virtual ~Platform() = default;
+    virtual std::vector<MonitorInfo> monitors() = 0;
+    virtual std::unique_ptr<Surface> createSurface(const MonitorInfo& monitor) = 0;
+};
+
+} // namespace vw

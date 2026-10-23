@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Video Wallpaper
+Name[zh_CN]=视频壁纸
+Comment=Play a video as the desktop wallpaper
+Comment[zh_CN]=把视频当作桌面壁纸播放
+Exec=videowallpaper
+Icon=preferences-desktop-wallpaper
+Terminal=false
+Categories=Utility;
+NoDisplay=false
+X-KDE-autostart-after=panel

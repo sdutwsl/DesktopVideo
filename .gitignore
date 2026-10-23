@@ -1,0 +1,21 @@
+# CMake / build output
+build/
+build-*/
+out/
+cmake-build-*/
+
+# Nix
+result
+result-*
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+
+# Editors
+.idea/
+.vscode/
+*.swp
