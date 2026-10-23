@@ -49,13 +49,6 @@ std::vector<MenuItem> buildAppMenu(Wallpaper& wallpaper, const MenuActions& acti
     mute.activate = [&wallpaper] { wallpaper.setMute(!wallpaper.mute()); };
     menu.push_back(mute);
 
-    MenuItem covered;
-    covered.label = "有窗口最大化/全屏时暂停";
-    covered.checkable = true;
-    covered.checked = wallpaper.pauseWhenCovered();
-    covered.activate = [&wallpaper] { wallpaper.setPauseWhenCovered(!wallpaper.pauseWhenCovered()); };
-    menu.push_back(covered);
-
     menu.push_back(MenuItem::Separator());
 
     MenuItem quit;

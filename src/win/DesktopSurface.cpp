@@ -1,11 +1,12 @@
 #include "DesktopSurface.h"
-#include "core/VlcPlayer.h"
+#include "core/MpvPlayer.h"
 
 #include <cstdio>
 
 namespace vw {
 
 static const wchar_t* SURFACE_CLASS = L"VideoWallpaperSurface";
+static const UINT WMAPP_MPV_EVENTS = WM_APP + 1;   // posted by mpv's wakeup callback
 
 std::string toUtf8(const wchar_t* text)
 {
@@ -29,18 +30,51 @@ std::wstring toWide(const std::string& text)
 
 class WinSurface : public Surface {
 public:
-    WinSurface(HWND hwnd, MonitorInfo monitor) : hwnd_(hwnd), monitor_(std::move(monitor)) {}
+    WinSurface(HWND hwnd, MonitorInfo monitor) : hwnd_(hwnd), monitor_(std::move(monitor))
+    {
+        SetWindowLongPtrW(hwnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+    }
     ~WinSurface() override
     {
-        if (hwnd_)
+        detach();
+        if (hwnd_) {
+            SetWindowLongPtrW(hwnd_, GWLP_USERDATA, 0);
             DestroyWindow(hwnd_);
+        }
     }
     const MonitorInfo& monitor() const override { return monitor_; }
-    void attach(VlcPlayer& player) override { player.setNativeWindow(hwnd_); }
+
+    // mpv draws into our window itself (D3D11 by default).
+    void attach(MpvPlayer& player) override
+    {
+        player_ = &player;
+        player.setWindow(static_cast<int64_t>(reinterpret_cast<intptr_t>(hwnd_)));
+        HWND hwnd = hwnd_;
+        player.setWakeup([hwnd] { PostMessageW(hwnd, WMAPP_MPV_EVENTS, 0, 0); });
+        player.initialize();
+    }
+    void detach() override
+    {
+        if (player_)
+            player_->setWakeup(nullptr);
+        player_ = nullptr;
+    }
+
+    static LRESULT CALLBACK windowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+    {
+        if (msg == WMAPP_MPV_EVENTS) {
+            auto* self = reinterpret_cast<WinSurface*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+            if (self && self->player_)
+                self->player_->processEvents();
+            return 0;
+        }
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
 
 private:
     HWND hwnd_;
     MonitorInfo monitor_;
+    MpvPlayer* player_ = nullptr;
 };
 
 // ---- WinPlatform ------------------------------------------------------------------
@@ -48,7 +82,7 @@ private:
 WinPlatform::WinPlatform()
 {
     WNDCLASSW wc = {};
-    wc.lpfnWndProc = DefWindowProcW;
+    wc.lpfnWndProc = WinSurface::windowProc;
     wc.hInstance = GetModuleHandleW(nullptr);
     wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
     wc.lpszClassName = SURFACE_CLASS;

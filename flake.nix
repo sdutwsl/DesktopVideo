@@ -3,55 +3,52 @@
 
   # Resolved through the flake registry (system nixpkgs on NixOS); override with
   #   nix develop --override-input nixpkgs github:NixOS/nixpkgs/nixos-unstable
+  # Consumers should use `inputs.nixpkgs.follows = "nixpkgs"` so the binary links the
+  # same glibc as the system's GPU drivers (/run/opengl-driver).
   inputs.nixpkgs.url = "flake:nixpkgs";
 
-  outputs = { self, nixpkgs }:
+  outputs =
+    { self, nixpkgs }:
     let
-      systems = [ "x86_64-linux" "aarch64-linux" ];
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
       forAll = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
-      waylandDeps = pkgs: with pkgs; [
-        libvlc
-        wayland
-        wayland-protocols
-        wlr-protocols
-        libglvnd          # EGL + GLESv2
-        libffi            # wayland-client.pc depends on it
-        sdbus-cpp
-        systemdLibs       # sd-bus, required by sdbus-cpp
-      ];
-      nativeDeps = pkgs: with pkgs; [
-        cmake
-        ninja
-        pkg-config
-        wayland-scanner
-      ];
     in
     {
-      packages = forAll (pkgs: {
-        default = pkgs.stdenv.mkDerivation {
-          pname = "videowallpaper";
-          version = "2.0";
-          src = nixpkgs.lib.cleanSourceWith {
-            src = ./.;
-            filter = path: type:
-              let name = baseNameOf path;
-              in !(nixpkgs.lib.hasPrefix "build" name || name == "Archived" || name == "result");
-          };
-          nativeBuildInputs = nativeDeps pkgs;
-          buildInputs = waylandDeps pkgs;
-        };
+      packages = forAll (pkgs: rec {
+        videowallpaper = pkgs.callPackage ./nix/package.nix { };
+        default = videowallpaper;
       });
+
+      overlays.default = final: _prev: {
+        videowallpaper = final.callPackage ./nix/package.nix { };
+      };
+
+      # programs.videowallpaper.{enable,package,autostart}
+      nixosModules.default = import ./nix/nixos-module.nix;
+      homeModules.default = import ./nix/home-module.nix;
+      homeManagerModules.default = self.homeModules.default;
 
       devShells = forAll (pkgs: {
         default = pkgs.mkShell {
-          nativeBuildInputs = nativeDeps pkgs;
-          buildInputs = waylandDeps pkgs;
+          inputsFrom = [ self.packages.${pkgs.stdenv.hostPlatform.system}.default ];
         };
         # Cross-compile the Windows exe: nix develop .#mingw, then use cmake/mingw-toolchain.cmake
         mingw = pkgs.mkShell {
-          nativeBuildInputs = with pkgs; [ cmake ninja pkgsCross.mingwW64.stdenv.cc ];
+          nativeBuildInputs = with pkgs; [
+            cmake
+            ninja
+            p7zip # unpack the libmpv SDK (mpv-dev-x86_64-*.7z)
+            pkgsCross.mingwW64.stdenv.cc
+          ];
           buildInputs = [ pkgs.pkgsCross.mingwW64.windows.mcfgthreads ];
         };
+      });
+
+      checks = forAll (pkgs: {
+        package = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
       });
     };
 }

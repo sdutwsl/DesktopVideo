@@ -1,12 +1,10 @@
-// VideoWallpaper for Windows: libvlc renders into child windows of Explorer's
+// VideoWallpaper for Windows: libmpv renders into child windows of Explorer's
 // WorkerW (below the desktop icons); a Shell_NotifyIcon tray menu controls it.
 
 #include "DesktopSurface.h"
 #include "Resource.h"
-#include "Session.h"
 #include "core/Config.h"
 #include "core/Menu.h"
-#include "core/VlcPlayer.h"
 #include "core/Wallpaper.h"
 
 #include <windows.h>
@@ -27,18 +25,15 @@ namespace {
 const wchar_t* MAIN_CLASS = L"VideoWallpaperMain";
 const UINT WMAPP_TRAY = WM_APP + 1;
 const UINT TRAY_ID = 1;
-const UINT_PTR TIMER_COVERAGE = 1;
-const UINT_PTR TIMER_REBUILD = 2;
+const UINT_PTR TIMER_REBUILD = 1;
 
 struct App {
     HINSTANCE instance = nullptr;
     HWND hwnd = nullptr;
     UINT taskbarCreated = 0;
     std::unique_ptr<Config> config;
-    std::unique_ptr<VlcInstance> vlc;
     std::unique_ptr<WinPlatform> platform;
     std::unique_ptr<Wallpaper> wallpaper;
-    CoverageMonitor coverage;
     MenuActions actions;
 };
 App app;
@@ -159,10 +154,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         return 0;
 
     case WM_TIMER:
-        if (wParam == TIMER_COVERAGE) {
-            for (const auto& [id, covered] : app.coverage.poll(app.wallpaper->monitors()))
-                app.wallpaper->setCovered(id, covered);
-        } else if (wParam == TIMER_REBUILD) {
+        if (wParam == TIMER_REBUILD) {
             KillTimer(hwnd, TIMER_REBUILD);
             app.wallpaper->rebuildSurfaces();
         }
@@ -227,14 +219,8 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR cmdLine, int)
         LocalFree(argv);
     }
 
-    app.vlc = std::make_unique<VlcInstance>(std::vector<std::string>{"--quiet", "--no-video-title-show", "--no-disable-screensaver"});
-    if (!app.vlc->ok()) {
-        MessageBoxW(nullptr, L"libvlc 初始化失败：请确认 libvlc.dll、libvlccore.dll 和 plugins 目录与程序在同一目录。",
-                    L"Video Wallpaper", MB_OK | MB_ICONERROR);
-        return 1;
-    }
     app.platform = std::make_unique<WinPlatform>();
-    app.wallpaper = std::make_unique<Wallpaper>(*app.platform, *app.vlc, *app.config);
+    app.wallpaper = std::make_unique<Wallpaper>(*app.platform, *app.config);
 
     app.actions.quit = [] { DestroyWindow(app.hwnd); };
     app.actions.chooseVideo = [](const std::string& monitor) {
@@ -258,7 +244,6 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR cmdLine, int)
 
     trayIcon(true);
     WTSRegisterSessionNotification(app.hwnd, NOTIFY_FOR_THIS_SESSION);
-    SetTimer(app.hwnd, TIMER_COVERAGE, 1000, nullptr);
 
     app.wallpaper->refreshMonitors();
     if (app.wallpaper->videoFor("").empty())
@@ -274,7 +259,6 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR cmdLine, int)
     trayIcon(false);
     app.wallpaper.reset();     // stops players, destroys the surfaces
     app.platform.reset();      // hides the WorkerW so Explorer's wallpaper returns
-    app.vlc.reset();
     CloseHandle(mutex);
     return int(msg.wParam);
 }

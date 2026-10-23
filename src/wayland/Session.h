@@ -52,7 +52,6 @@ public:
         std::function<void(bool)> setPaused;
         std::function<void(bool)> setMute;
         std::function<void(int)> setVolume;
-        std::function<void(std::string monitor, bool covered)> setCovered;   // from the KWin script
         std::function<void()> quit;
         std::function<std::vector<std::string>()> monitors;
     };

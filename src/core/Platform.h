@@ -6,7 +6,7 @@
 
 namespace vw {
 
-class VlcPlayer;
+class MpvPlayer;
 
 struct MonitorInfo {
     std::string id;     // stable name: "\\.\DISPLAY1" on Windows, connector name ("DP-1") on Wayland
@@ -21,8 +21,10 @@ class Surface {
 public:
     virtual ~Surface() = default;
     virtual const MonitorInfo& monitor() const = 0;
-    // Route the player's video output into this surface (native window handle or frame sink).
-    virtual void attach(VlcPlayer& player) = 0;
+    // Route the player's video output into this surface and initialise the player.
+    virtual void attach(MpvPlayer& player) = 0;
+    // Undo attach(); called before the player is destroyed (the surface still exists).
+    virtual void detach() = 0;
 };
 
 // Everything the core needs from the OS.

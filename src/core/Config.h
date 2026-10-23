@@ -10,7 +10,6 @@ namespace vw {
 //   video.<monitor id>    per-monitor override
 //   volume                0..100
 //   mute                  0/1
-//   pause_when_covered    0/1  pause a monitor while a maximized/fullscreen window covers it
 //   pause_when_locked     0/1
 //   audio_monitor         which monitor plays audio (empty = platform's primary)
 class Config {

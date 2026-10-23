@@ -10,48 +10,41 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-find_package(LibVLC REQUIRED)
+if(MSVC)
+    # The libmpv SDK for Windows only ships a MinGW import library (libmpv.dll.a).
+    message(FATAL_ERROR "Build the Windows version with MinGW-w64 (see README); MSVC is not supported.")
+endif()
+
+find_package(Mpv REQUIRED)
 
 # ---- shared core -------------------------------------------------------------
 add_library(vw_core STATIC
     src/core/Config.cpp
-    src/core/FrameQueue.cpp
     src/core/Menu.cpp
-    src/core/VlcPlayer.cpp
+    src/core/MpvPlayer.cpp
     src/core/Wallpaper.cpp
 )
 target_include_directories(vw_core PUBLIC src)
-target_link_libraries(vw_core PUBLIC LibVLC::LibVLC)
-if(MSVC)
-    target_compile_options(vw_core PUBLIC /utf-8 /W4)
-else()
-    target_compile_options(vw_core PUBLIC -Wall -Wextra)
-endif()
+target_link_libraries(vw_core PUBLIC Mpv::Mpv)
+target_compile_options(vw_core PUBLIC -Wall -Wextra)
 
 # ---- Windows: WorkerW + Shell_NotifyIcon ---------------------------------------
 if(WIN32)
     add_executable(videowallpaper WIN32
         src/win/main.cpp
         src/win/DesktopSurface.cpp
-        src/win/Session.cpp
         src/win/VideoWallpaper.rc
     )
     target_include_directories(videowallpaper PRIVATE src/win)
     target_compile_definitions(videowallpaper PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
-    target_link_libraries(videowallpaper PRIVATE vw_core user32 gdi32 shell32 comdlg32 wtsapi32 ole32 dwmapi)
-    if(MINGW)
-        target_link_options(videowallpaper PRIVATE -municode)   # wWinMain entry point
-    endif()
+    target_link_libraries(videowallpaper PRIVATE vw_core user32 gdi32 shell32 comdlg32 wtsapi32 ole32)
+    target_link_options(videowallpaper PRIVATE -municode)   # wWinMain entry point
 
-    # Put libvlc's runtime next to the exe when the SDK sits inside an unpacked VLC release.
-    if(LIBVLC_SDK_DIR AND EXISTS "${LIBVLC_SDK_DIR}/../libvlc.dll")
-        get_filename_component(VLC_RUNTIME_DIR "${LIBVLC_SDK_DIR}/.." ABSOLUTE)
+    # libmpv is a single DLL; put it next to the exe.
+    if(Mpv_DLL)
         add_custom_command(TARGET videowallpaper POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${VLC_RUNTIME_DIR}/libvlc.dll" "${VLC_RUNTIME_DIR}/libvlccore.dll" "$<TARGET_FILE_DIR:videowallpaper>"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${VLC_RUNTIME_DIR}/plugins" "$<TARGET_FILE_DIR:videowallpaper>/plugins"
-            COMMENT "Copying libvlc runtime")
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${Mpv_DLL}" "$<TARGET_FILE_DIR:videowallpaper>"
+            COMMENT "Copying libmpv runtime")
     endif()
 
 # ---- Linux: Wayland layer-shell + StatusNotifierItem -------------------------------
@@ -74,7 +67,6 @@ else()
         xdg-output-unstable-v1
         fractional-scale-v1
         wlr-layer-shell-unstable-v1
-        wlr-foreign-toplevel-management-unstable-v1
     )
     set(PROTOCOL_SOURCES)
     foreach(proto IN LISTS PROTOCOLS)
@@ -90,17 +82,9 @@ else()
         list(APPEND PROTOCOL_SOURCES "${header}" "${source}")
     endforeach()
 
-    # Embed the KWin helper script so the binary is self-contained.
-    file(READ src/wayland/kwin/coverage.js KWIN_COVERAGE_JS)
-    file(WRITE "${PROTOCOL_OUT}/kwin_coverage_script.h"
-        "#pragma once\nstatic const char* KWIN_COVERAGE_SCRIPT = R\"JS(\n${KWIN_COVERAGE_JS})JS\";\n")
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS src/wayland/kwin/coverage.js)
-
     add_executable(videowallpaper
         src/wayland/main.cpp
-        src/wayland/KWinBridge.cpp
         src/wayland/EventLoop.cpp
-        src/wayland/GlRenderer.cpp
         src/wayland/LayerSurface.cpp
         src/wayland/Session.cpp
         src/wayland/Tray.cpp

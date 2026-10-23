@@ -7,14 +7,13 @@ namespace vw {
 static const char* KEY_VIDEO = "video";
 static const char* KEY_VOLUME = "volume";
 static const char* KEY_MUTE = "mute";
-static const char* KEY_PAUSE_COVERED = "pause_when_covered";
 static const char* KEY_PAUSE_LOCKED = "pause_when_locked";
 static const char* KEY_AUDIO_MONITOR = "audio_monitor";
 
 static std::string overrideKey(const std::string& monitorId) { return std::string(KEY_VIDEO) + "." + monitorId; }
 
-Wallpaper::Wallpaper(Platform& platform, VlcInstance& vlc, Config& config)
-    : platform_(platform), vlc_(vlc), config_(config)
+Wallpaper::Wallpaper(Platform& platform, Config& config)
+    : platform_(platform), config_(config)
 {
 }
 
@@ -60,9 +59,8 @@ void Wallpaper::refreshMonitors()
         slot->surface = platform_.createSurface(m);
         if (!slot->surface)
             continue;
-        slot->player = std::make_unique<VlcPlayer>(vlc_);
+        slot->player = std::make_unique<MpvPlayer>();
         slot->surface->attach(*slot->player);
-        slot->player->setFillAspect(m.width, m.height);
         openSlot(*slot);
         slots_.push_back(std::move(slot));
     }
@@ -143,23 +141,13 @@ void Wallpaper::setSuspended(bool suspended)
     applyPlayback();
 }
 
-void Wallpaper::setCovered(const std::string& monitorId, bool covered)
-{
-    if (Slot* slot = find(monitorId)) {
-        slot->covered = covered;
-        applyPlayback();
-    }
-}
-
 void Wallpaper::applyPlayback()
 {
-    const bool pauseCovered = config_.getBool(KEY_PAUSE_COVERED, true);
     const bool pauseLocked = config_.getBool(KEY_PAUSE_LOCKED, true);
-    const bool globalPause = userPaused_ || suspended_ || (pauseLocked && locked_);
+    const bool pause = userPaused_ || suspended_ || (pauseLocked && locked_);
     for (auto& slot : slots_) {
         if (slot->player->path().empty())
             continue;
-        const bool pause = globalPause || (pauseCovered && slot->covered);
         slot->player->setPaused(pause);
     }
 }
@@ -189,18 +177,6 @@ void Wallpaper::setMute(bool mute)
 bool Wallpaper::mute() const
 {
     return config_.getBool(KEY_MUTE, false);
-}
-
-void Wallpaper::setPauseWhenCovered(bool enabled)
-{
-    config_.set(KEY_PAUSE_COVERED, enabled);
-    config_.save();
-    applyPlayback();
-}
-
-bool Wallpaper::pauseWhenCovered() const
-{
-    return config_.getBool(KEY_PAUSE_COVERED, true);
 }
 
 std::vector<MonitorInfo> Wallpaper::monitors() const

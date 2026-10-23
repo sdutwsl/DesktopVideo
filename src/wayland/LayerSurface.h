@@ -1,42 +1,33 @@
 #pragma once
 
 #include "EventLoop.h"
-#include "GlRenderer.h"
 #include "WaylandDisplay.h"
-#include "core/FrameQueue.h"
 #include "core/Platform.h"
 
 #include <EGL/egl.h>
 #include <wayland-client.h>
 #include <wayland-egl.h>
 
-#include <atomic>
-
 struct zwlr_layer_surface_v1;
 struct wp_viewport;
 struct wp_fractional_scale_v1;
+struct mpv_render_context;
 
 namespace vw {
 
-// A background layer-shell surface covering one output. VLC decodes into the
-// frame queue from its own threads; frames are drawn here on the loop thread.
-class LayerSurface : public Surface, public FrameSink, public EventLoop::Source {
+// A background layer-shell surface covering one output. mpv decodes on its own
+// threads and draws through its render API into our EGL surface on the loop thread.
+class LayerSurface : public Surface, public EventLoop::Source {
 public:
     LayerSurface(WaylandDisplay& display, Output& output, const MonitorInfo& monitor);
     ~LayerSurface() override;
 
     // Surface
     const MonitorInfo& monitor() const override { return monitor_; }
-    void attach(VlcPlayer& player) override;
+    void attach(MpvPlayer& player) override;
+    void detach() override;
 
-    // FrameSink, called from VLC threads
-    void setup(const VideoFormat& format) override;
-    void* lock(void** planes) override;
-    void unlock(void* handle) override;
-    void display(void* handle) override;
-    void cleanup() override;
-
-    // EventLoop::Source, woken by display()
+    // EventLoop::Source, woken by mpv (new frame or pending events)
     int fd() override { return wakeFd_; }
     void dispatch(short revents) override;
 
@@ -46,6 +37,8 @@ private:
     void resizeBuffer();
     void render();
     void frameDone();
+    void wake();
+    bool makeCurrent();
 
     WaylandDisplay& display_;
     Output& output_;
@@ -65,12 +58,10 @@ private:
     bool configured_ = false;
     bool closed_ = false;
     bool dirty_ = false;   // a frame arrived while a frame callback was pending
+    unsigned framesDrawn_ = 0;   // VW_DEBUG statistics
 
-    FrameQueue queue_;
-    GlRenderer::Textures textures_;
-    VideoFormat format_;
-    std::atomic<bool> formatChanged_{false};
-    std::atomic<bool> formatCleared_{false};
+    MpvPlayer* player_ = nullptr;
+    mpv_render_context* render_ = nullptr;
     int wakeFd_ = -1;
 };
 

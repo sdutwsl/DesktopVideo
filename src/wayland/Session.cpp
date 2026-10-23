@@ -132,8 +132,6 @@ Control::Control(sdbus::IConnection& bus, Handlers handlers) : handlers_(std::mo
     o.registerMethod("SetPaused").onInterface(INTERFACE).implementedAs([this](bool paused) { handlers_.setPaused(paused); });
     o.registerMethod("SetMute").onInterface(INTERFACE).implementedAs([this](bool mute) { handlers_.setMute(mute); });
     o.registerMethod("SetVolume").onInterface(INTERFACE).implementedAs([this](int32_t volume) { handlers_.setVolume(volume); });
-    o.registerMethod("SetCovered").onInterface(INTERFACE).implementedAs(
-        [this](std::string monitor, bool covered) { handlers_.setCovered(monitor, covered); });
     o.registerMethod("GetMonitors").onInterface(INTERFACE).implementedAs([this] { return handlers_.monitors(); });
     o.registerMethod("Quit").onInterface(INTERFACE).implementedAs([this] { handlers_.quit(); });
     o.finishRegistration();

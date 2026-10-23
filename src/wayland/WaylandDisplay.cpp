@@ -3,7 +3,6 @@
 
 #include "fractional-scale-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
-#include "wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-output-unstable-v1-client-protocol.h"
 
@@ -79,18 +78,12 @@ WaylandDisplay::~WaylandDisplay()
 {
     if (connected_)
         loop_.remove(this);
-    renderer_.destroy();
     if (eglDisplay_ != EGL_NO_DISPLAY) {
         eglMakeCurrent(eglDisplay_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         if (eglContext_ != EGL_NO_CONTEXT)
             eglDestroyContext(eglDisplay_, eglContext_);
         eglTerminate(eglDisplay_);
     }
-    for (auto& [handle, t] : toplevels_)
-        zwlr_foreign_toplevel_handle_v1_destroy(handle);
-    toplevels_.clear();
-    if (toplevelManager_)
-        zwlr_foreign_toplevel_manager_v1_destroy(toplevelManager_);
     for (auto& out : outputs_) {
         if (out->xdgOutput)
             zxdg_output_v1_destroy(out->xdgOutput);
@@ -138,66 +131,6 @@ void WaylandDisplay::registryGlobal(void* data, wl_registry* registry, uint32_t 
             static_cast<wp_fractional_scale_manager_v1*>(bind(&wp_fractional_scale_manager_v1_interface, 1));
     } else if (!std::strcmp(interface, wl_output_interface.name)) {
         self->addOutput(name, std::min(version, 4u));
-    } else if (!std::strcmp(interface, zwlr_foreign_toplevel_manager_v1_interface.name)) {
-        self->toplevelManager_ =
-            static_cast<zwlr_foreign_toplevel_manager_v1*>(bind(&zwlr_foreign_toplevel_manager_v1_interface, 3));
-
-        static const zwlr_foreign_toplevel_manager_v1_listener managerListener = {
-            // toplevel
-            [](void* data, zwlr_foreign_toplevel_manager_v1*, zwlr_foreign_toplevel_handle_v1* handle) {
-                auto* self = static_cast<WaylandDisplay*>(data);
-                auto t = std::make_unique<Toplevel>();
-                t->display = self;
-                t->handle = handle;
-
-                static const zwlr_foreign_toplevel_handle_v1_listener handleListener = {
-                    [](void*, zwlr_foreign_toplevel_handle_v1*, const char*) {},   // title
-                    [](void*, zwlr_foreign_toplevel_handle_v1*, const char*) {},   // app_id
-                    // output_enter
-                    [](void* data, zwlr_foreign_toplevel_handle_v1*, wl_output* output) {
-                        static_cast<Toplevel*>(data)->pendingOutputs.insert(output);
-                    },
-                    // output_leave
-                    [](void* data, zwlr_foreign_toplevel_handle_v1*, wl_output* output) {
-                        static_cast<Toplevel*>(data)->pendingOutputs.erase(output);
-                    },
-                    // state
-                    [](void* data, zwlr_foreign_toplevel_handle_v1*, wl_array* states) {
-                        auto* t = static_cast<Toplevel*>(data);
-                        t->pMaximized = t->pFullscreen = t->pMinimized = false;
-                        const auto* begin = static_cast<const uint32_t*>(states->data);
-                        const auto* end = begin + states->size / sizeof(uint32_t);
-                        for (const uint32_t* s = begin; s != end; ++s) {
-                            if (*s == ZWLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_MAXIMIZED) t->pMaximized = true;
-                            if (*s == ZWLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_FULLSCREEN) t->pFullscreen = true;
-                            if (*s == ZWLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_MINIMIZED) t->pMinimized = true;
-                        }
-                    },
-                    // done
-                    [](void* data, zwlr_foreign_toplevel_handle_v1*) {
-                        auto* t = static_cast<Toplevel*>(data);
-                        t->outputs = t->pendingOutputs;
-                        t->maximized = t->pMaximized;
-                        t->fullscreen = t->pFullscreen;
-                        t->minimized = t->pMinimized;
-                        t->display->updateCoverage();
-                    },
-                    // closed
-                    [](void* data, zwlr_foreign_toplevel_handle_v1* handle) {
-                        WaylandDisplay* self = static_cast<Toplevel*>(data)->display;
-                        zwlr_foreign_toplevel_handle_v1_destroy(handle);
-                        self->toplevels_.erase(handle);
-                        self->updateCoverage();
-                    },
-                    [](void*, zwlr_foreign_toplevel_handle_v1*, zwlr_foreign_toplevel_handle_v1*) {},   // parent
-                };
-                zwlr_foreign_toplevel_handle_v1_add_listener(handle, &handleListener, t.get());
-                self->toplevels_[handle] = std::move(t);
-            },
-            // finished
-            [](void*, zwlr_foreign_toplevel_manager_v1*) {},
-        };
-        zwlr_foreign_toplevel_manager_v1_add_listener(self->toplevelManager_, &managerListener, self);
     }
 }
 
@@ -249,7 +182,6 @@ void WaylandDisplay::removeOutput(uint32_t name)
                            [&](const std::unique_ptr<Output>& o) { return o->globalName == name; });
     if (it == outputs_.end())
         return;
-    covered_.erase((*it)->output);
     if ((*it)->xdgOutput)
         zxdg_output_v1_destroy((*it)->xdgOutput);
     wl_output_destroy((*it)->output);
@@ -268,7 +200,7 @@ bool WaylandDisplay::connect(std::string& error)
     wl_registry_add_listener(registry_, &registryListener, this);
 
     wl_display_roundtrip(display_);   // globals
-    wl_display_roundtrip(display_);   // output details, xdg_output, initial toplevels
+    wl_display_roundtrip(display_);   // output details, xdg_output
 
     if (!compositor_) {
         error = "compositor lacks wl_compositor";
@@ -281,9 +213,8 @@ bool WaylandDisplay::connect(std::string& error)
     if (!initEgl(error))
         return false;
 
-    fprintf(stderr, "[wayland] layer-shell ok, viewporter %s, fractional-scale %s, foreign-toplevel %s\n",
-            viewporter_ ? "yes" : "no", fractionalScale_ ? "yes" : "no",
-            toplevelManager_ ? "yes" : "no (cannot pause behind fullscreen windows)");
+    fprintf(stderr, "[wayland] layer-shell ok, viewporter %s, fractional-scale %s\n",
+            viewporter_ ? "yes" : "no", fractionalScale_ ? "yes" : "no");
 
     lastMonitors_ = monitors();
     connected_ = true;
@@ -301,7 +232,7 @@ bool WaylandDisplay::initEgl(std::string& error)
     eglBindAPI(EGL_OPENGL_ES_API);
     const EGLint attribs[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,   // ES3-capable configs carry this bit too
         EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8,
         EGL_ALPHA_SIZE, 0,
         EGL_NONE,
@@ -311,24 +242,15 @@ bool WaylandDisplay::initEgl(std::string& error)
         error = "no suitable EGL config";
         return false;
     }
-    const EGLint ctxAttribs[] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
-    eglContext_ = eglCreateContext(eglDisplay_, eglConfig_, EGL_NO_CONTEXT, ctxAttribs);
-    if (eglContext_ == EGL_NO_CONTEXT) {
-        error = "cannot create an OpenGL ES 2 context";
-        return false;
+    // mpv renders best on ES 3 (high bit depth textures, VAAPI interop); ES 2 still works.
+    for (EGLint version : {3, 2}) {
+        const EGLint ctxAttribs[] = {EGL_CONTEXT_CLIENT_VERSION, version, EGL_NONE};
+        eglContext_ = eglCreateContext(eglDisplay_, eglConfig_, EGL_NO_CONTEXT, ctxAttribs);
+        if (eglContext_ != EGL_NO_CONTEXT)
+            return true;
     }
-    return true;
-}
-
-GlRenderer& WaylandDisplay::renderer()
-{
-    if (!rendererReady_) {
-        std::string err;
-        rendererReady_ = renderer_.init(err);
-        if (!rendererReady_)
-            fprintf(stderr, "[gl] shader setup failed: %s\n", err.c_str());
-    }
-    return renderer_;
+    error = "cannot create an OpenGL ES context";
+    return false;
 }
 
 std::vector<MonitorInfo> WaylandDisplay::monitors()
@@ -369,33 +291,6 @@ std::unique_ptr<Surface> WaylandDisplay::createSurface(const MonitorInfo& monito
         if (out->name == monitor.id)
             return std::make_unique<LayerSurface>(*this, *out, monitor);
     return nullptr;
-}
-
-void WaylandDisplay::updateCoverage()
-{
-    std::map<wl_output*, bool> now;
-    for (const auto& out : outputs_)
-        now[out->output] = false;
-    for (const auto& [handle, t] : toplevels_) {
-        if (t->minimized || !(t->maximized || t->fullscreen))
-            continue;
-        for (wl_output* o : t->outputs)
-            now[o] = true;
-    }
-    for (const auto& [output, covered] : now) {
-        auto prev = covered_.find(output);
-        if (prev != covered_.end() && prev->second == covered)
-            continue;
-        covered_[output] = covered;
-        for (const auto& out : outputs_) {
-            if (out->output != output || out->name.empty())
-                continue;
-            if (getenv("VW_DEBUG"))
-                fprintf(stderr, "[%s] %s\n", out->name.c_str(), covered ? "covered by a maximized/fullscreen window" : "uncovered");
-            if (onOutputCovered)
-                onOutputCovered(out->name, covered);
-        }
-    }
 }
 
 // ---- EventLoop::Source ---------------------------------------------------------

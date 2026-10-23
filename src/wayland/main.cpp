@@ -1,15 +1,13 @@
-// VideoWallpaper for Wayland: layer-shell background surfaces fed by libvlc,
+// VideoWallpaper for Wayland: layer-shell background surfaces drawn by libmpv,
 // a StatusNotifierItem tray icon and a small D-Bus control interface.
 
 #include "DBus.h"
 #include "EventLoop.h"
-#include "KWinBridge.h"
 #include "Session.h"
 #include "Tray.h"
 #include "WaylandDisplay.h"
 #include "core/Config.h"
 #include "core/Menu.h"
-#include "core/VlcPlayer.h"
 #include "core/Wallpaper.h"
 
 #include <signal.h>
@@ -205,13 +203,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    VlcInstance vlc({"--no-xlib", "--quiet", "--no-video-title-show", "--no-disable-screensaver"});
-    if (!vlc.ok()) {
-        fputs("videowallpaper: libvlc failed to initialise\n", stderr);
-        return 1;
-    }
-
-    Wallpaper wallpaper(display, vlc, config);
+    Wallpaper wallpaper(display, config);
     Tray tray(*session, "videowallpaper", "Video Wallpaper");
     FileChooser chooser(*session);
 
@@ -239,7 +231,6 @@ int main(int argc, char** argv)
         wallpaper.refreshMonitors();
         rebuildMenu();
     };
-    display.onOutputCovered = [&](const std::string& name, bool covered) { wallpaper.setCovered(name, covered); };
     display.onDisconnected = [&] {
         fputs("videowallpaper: compositor went away\n", stderr);
         loop.quit();
@@ -256,11 +247,6 @@ int main(int argc, char** argv)
         [&](bool paused) { wallpaper.setUserPaused(paused); rebuildMenu(); },
         [&](bool mute) { wallpaper.setMute(mute); rebuildMenu(); },
         [&](int volume) { wallpaper.setVolume(volume); },
-        [&](std::string monitor, bool covered) {
-            if (getenv("VW_DEBUG"))
-                fprintf(stderr, "[%s] %s (kwin)\n", monitor.c_str(), covered ? "covered" : "uncovered");
-            wallpaper.setCovered(monitor, covered);
-        },
         [&] { loop.quit(); },
         [&] {
             std::vector<std::string> names;
@@ -269,9 +255,6 @@ int main(int argc, char** argv)
             return names;
         },
     });
-
-    // Plasma: window states come from a script inside KWin instead of a Wayland protocol.
-    KWinBridge kwin(*session);
 
     SignalSource signals([&] { loop.quit(); });
     loop.add(&signals);

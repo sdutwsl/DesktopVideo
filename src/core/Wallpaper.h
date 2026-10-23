@@ -2,7 +2,7 @@
 
 #include "Config.h"
 #include "Platform.h"
-#include "VlcPlayer.h"
+#include "MpvPlayer.h"
 
 #include <memory>
 #include <string>
@@ -14,7 +14,7 @@ namespace vw {
 // each one shows, and whether playback should currently be running.
 class Wallpaper {
 public:
-    Wallpaper(Platform& platform, VlcInstance& vlc, Config& config);
+    Wallpaper(Platform& platform, Config& config);
     ~Wallpaper();
 
     // Sync surfaces and players with the platform's monitor list (startup and hotplug).
@@ -35,14 +35,11 @@ public:
     bool userPaused() const { return userPaused_; }
     void setLocked(bool locked);
     void setSuspended(bool suspended);
-    void setCovered(const std::string& monitorId, bool covered);   // fullscreen/maximized window on top
 
     void setVolume(int volume);
     int volume() const;
     void setMute(bool mute);
     bool mute() const;
-    void setPauseWhenCovered(bool enabled);
-    bool pauseWhenCovered() const;
 
     std::vector<MonitorInfo> monitors() const;
 
@@ -53,9 +50,13 @@ private:
     struct Slot {
         MonitorInfo monitor;
         std::unique_ptr<Surface> surface;   // declared before player: destroyed after it
-        std::unique_ptr<VlcPlayer> player;
+        std::unique_ptr<MpvPlayer> player;
         bool audio = false;
-        bool covered = false;
+        ~Slot()
+        {
+            if (surface && player)
+                surface->detach();
+        }
     };
 
     std::string audioMonitorId(const std::vector<MonitorInfo>& monitors) const;
@@ -64,7 +65,6 @@ private:
     Slot* find(const std::string& monitorId);
 
     Platform& platform_;
-    VlcInstance& vlc_;
     Config& config_;
     std::vector<std::unique_ptr<Slot>> slots_;
     bool userPaused_ = false;

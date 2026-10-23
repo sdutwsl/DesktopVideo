@@ -1,0 +1,67 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # The Windows build links against a libmpv dev archive (include/, libmpv.dll.a, libmpv-2.dll).
+  # SourceForge keeps every weekly build, so a pinned file stays downloadable.
+  MPV_SDK_URL: https://downloads.sourceforge.net/project/mpv-player-windows/libmpv/mpv-dev-x86_64-20261018-git-01e2533f31.7z
+  MPV_SDK_SHA256: d7f5621f42b6e161fe032df914a10bdece28a89df3e57c6c3e16a5a250929b5e
+
+jobs:
+  nix:
+    name: Linux (Nix flake)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: Check flake (builds the package)
+        run: nix flake check -L
+      - name: Build
+        run: nix build -L .#default
+
+  ubuntu:
+    name: Linux (Ubuntu apt + CMake)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build pkg-config g++ libmpv-dev libwayland-dev libwayland-bin \
+            libegl-dev libgles-dev libsdbus-c++-dev
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja
+          ninja -C build
+
+  windows:
+    name: Windows (MinGW cross from Nix)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: Fetch libmpv SDK
+        run: |
+          curl -fsSL -o mpv-dev.7z "$MPV_SDK_URL"
+          echo "${MPV_SDK_SHA256}  mpv-dev.7z" | sha256sum -c -
+          nix develop .#mingw -c 7z x -y -o"$RUNNER_TEMP/mpv-sdk" mpv-dev.7z > /dev/null
+      - name: Build
+        run: |
+          nix develop .#mingw -c cmake -S . -B build-win -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-toolchain.cmake \
+            -DMPV_SDK_DIR="$RUNNER_TEMP/mpv-sdk"
+          nix develop .#mingw -c ninja -C build-win
+      - name: Collect package
+        run: |
+          mkdir -p dist
+          cp build-win/videowallpaper.exe build-win/libmpv-2.dll dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: videowallpaper-windows-x64
+          path: dist/
