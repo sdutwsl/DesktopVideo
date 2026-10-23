@@ -37,6 +37,8 @@ GNOME 用户请用 [Hanabi](https://github.com/jeffshee/gnome-ext-hanabi) 之类
 
 ### 构建
 
+Ubuntu 24.04 可以直接装 [Releases](https://github.com/sdutwsl/DesktopVideo/releases) 里的 `.deb`（`sudo apt install ./videowallpaper-*.deb`，依赖会自动装上）。
+
 依赖：`libmpv`、`wayland-client`、`wayland-egl`、`egl`、`glesv2`、`sdbus-c++`、`wayland-scanner`、CMake ≥ 3.20、C++20 编译器。
 
 NixOS / 装了 Nix：
@@ -97,7 +99,7 @@ home-manager 用户换成 `inputs.videowallpaper.homeModules.default`，选项�
 
 依赖：MinGW-w64（GCC ≥ 13），CMake，libmpv 的 Windows 开发包。不支持 MSVC：libmpv 的 Windows 包只带 MinGW 导入库。
 
-现成的 exe：在 [Actions](https://github.com/sdutwsl/DesktopVideo/actions/workflows/build.yml) 里下载 `videowallpaper-windows-x64` 产物（`videowallpaper.exe` + `libmpv-2.dll`）。
+现成的 exe：[Releases](https://github.com/sdutwsl/DesktopVideo/releases) 里的 `videowallpaper-v*-windows-x64.zip`（`videowallpaper.exe` + `libmpv-2.dll`，解压即用）；master 每次提交的构建在 [Actions](https://github.com/sdutwsl/DesktopVideo/actions/workflows/build.yml) 的 `videowallpaper-windows-x64` 产物里。
 
 自己构建：
 
@@ -124,15 +126,26 @@ pause_when_locked=1
 audio_monitor=DP-1             # 哪个显示器出声，留空用主屏
 ```
 
+## 发布
+
+版本号只在 `CMakeLists.txt` 的 `project(VideoWallpaper VERSION x.y.z)` 里写一次，Nix 包和 Windows exe 的版本信息都从这里取。发布新版本：
+
+```sh
+# 先改 CMakeLists.txt 里的版本号并提交
+git tag v2.1.0 && git push origin v2.1.0
+```
+
+CI 跑完三路构建后自动创建 GitHub Release，附上 `videowallpaper-v2.1.0-windows-x64.zip`、`videowallpaper-v2.1.0-ubuntu-24.04-amd64.deb` 和 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v2.1.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
+
 ## 代码结构
 
 ```
 src/core/       平台无关：libmpv 封装、配置、多屏控制器、菜单模型
 src/wayland/    layer-shell 表面 + EGL 渲染、事件循环、SNI 托盘、D-Bus 会话事件
-src/win/        WorkerW 表面、Shell_NotifyIcon 托盘、锁屏/遮挡检测
+src/win/        WorkerW 表面、Shell_NotifyIcon 托盘、锁屏检测
 cmake/          FindMpv、MinGW 工具链
 nix/            Nix 包、NixOS / home-manager 模块
-.github/        CI：Nix、Ubuntu apt、MinGW 交叉三路构建
+.github/        CI：Nix、Ubuntu apt（打 .deb）、MinGW 交叉三路构建，打 tag 时发布 release
 Archived/       v1（C# WinForms 客户端 + C++ socket 服务端），仅存档
 ```
 

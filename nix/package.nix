@@ -15,7 +15,10 @@
 
 stdenv.mkDerivation {
   pname = "videowallpaper";
-  version = "2.0";
+  # project(... VERSION x.y.z) in CMakeLists.txt is the only place the version is set.
+  version = builtins.head (
+    builtins.match ".*project\\(VideoWallpaper VERSION ([0-9.]+).*" (builtins.readFile ../CMakeLists.txt)
+  );
 
   # Only what the build reads, so README/flake/CI edits do not trigger a rebuild.
   src = lib.fileset.toSource {

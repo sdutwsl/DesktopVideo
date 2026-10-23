@@ -1,10 +1,17 @@
 name: build
 
+# Every push to master builds all three variants. Pushing a tag v<VERSION>, where
+# VERSION matches project() in CMakeLists.txt, additionally publishes a GitHub release
+# with the Windows zip and the Ubuntu .deb.
 on:
   push:
     branches: [master]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 env:
   # The Windows build links against a libmpv dev archive (include/, libmpv.dll.a, libmpv-2.dll).
@@ -34,11 +41,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             cmake ninja-build pkg-config g++ libmpv-dev libwayland-dev libwayland-bin \
-            libegl-dev libgles-dev libsdbus-c++-dev
+            libegl-dev libgles-dev libsdbus-c++-dev dpkg-dev file
       - name: Build
         run: |
           cmake -S . -B build -G Ninja
           ninja -C build
+      - name: Package .deb
+        run: |
+          cd build
+          cpack -G DEB
+          dpkg-deb --info ./*.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: videowallpaper-ubuntu-24.04-amd64
+          path: build/*.deb
 
   windows:
     name: Windows (MinGW cross from Nix)
@@ -65,3 +81,43 @@ jobs:
         with:
           name: videowallpaper-windows-x64
           path: dist/
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [nix, ubuntu, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tag against project version
+        run: |
+          # v2.1.0 and v2.1.0-rc1 both need VERSION 2.1.0.
+          version=$(sed -n 's/^project(VideoWallpaper VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [ "v${version}" != "${GITHUB_REF_NAME%%-*}" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match CMakeLists.txt version ${version}; bump project(VERSION) first"
+            exit 1
+          fi
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Assemble assets
+        run: |
+          mkdir -p assets
+          (cd artifacts/videowallpaper-windows-x64 &&
+            zip -9 "$GITHUB_WORKSPACE/assets/videowallpaper-${GITHUB_REF_NAME}-windows-x64.zip" videowallpaper.exe libmpv-2.dll)
+          cp artifacts/videowallpaper-ubuntu-24.04-amd64/*.deb \
+            "assets/videowallpaper-${GITHUB_REF_NAME}-ubuntu-24.04-amd64.deb"
+          (cd assets && sha256sum -- * > SHA256SUMS)
+          ls -l assets
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # v1.2.3-rc1 and the like become pre-releases.
+          prerelease=()
+          case "$GITHUB_REF_NAME" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" assets/* \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes \
+            --title "VideoWallpaper ${GITHUB_REF_NAME}" "${prerelease[@]}"

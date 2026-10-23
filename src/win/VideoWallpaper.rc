@@ -1,13 +1,14 @@
 #pragma code_page(65001)
 #include <windows.h>
 #include "Resource.h"
+#include "Version.h"
 
 IDI_VIDEOWALLPAPER ICON "VideoWallpaper.ico"
 IDI_SMALL          ICON "small.ico"
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION    2,0,0,0
- PRODUCTVERSION 2,0,0,0
+ FILEVERSION    VW_VERSION_RC
+ PRODUCTVERSION VW_VERSION_RC
  FILEOS         VOS_NT_WINDOWS32
  FILETYPE       VFT_APP
 BEGIN
@@ -16,9 +17,9 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "FileDescription", "Video Wallpaper"
-            VALUE "FileVersion",     "2.0.0.0"
+            VALUE "FileVersion",     VW_VERSION_STR
             VALUE "ProductName",     "Video Wallpaper"
-            VALUE "ProductVersion",  "2.0.0.0"
+            VALUE "ProductVersion",  VW_VERSION_STR
             VALUE "OriginalFilename","videowallpaper.exe"
         END
     END

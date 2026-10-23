@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
-project(VideoWallpaper VERSION 2.0 LANGUAGES C CXX)
+# The single version number: the Nix package reads it from here, and release tags must be v<VERSION>.
+project(VideoWallpaper VERSION 2.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -35,7 +36,12 @@ if(WIN32)
         src/win/DesktopSurface.cpp
         src/win/VideoWallpaper.rc
     )
-    target_include_directories(videowallpaper PRIVATE src/win)
+    # Version.h feeds the version resource in VideoWallpaper.rc.
+    file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/Version.h" CONTENT
+"#define VW_VERSION_RC  @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+#define VW_VERSION_STR \"@PROJECT_VERSION@\"
+" @ONLY)
+    target_include_directories(videowallpaper PRIVATE src/win "${CMAKE_CURRENT_BINARY_DIR}")
     target_compile_definitions(videowallpaper PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
     target_link_libraries(videowallpaper PRIVATE vw_core user32 gdi32 shell32 comdlg32 wtsapi32 ole32)
     target_link_options(videowallpaper PRIVATE -municode)   # wWinMain entry point
@@ -97,4 +103,14 @@ else()
     include(GNUInstallDirs)
     install(TARGETS videowallpaper RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     install(FILES data/videowallpaper.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+
+    # `cpack -G DEB` builds the .deb attached to releases; dpkg-shlibdeps fills in Depends.
+    set(CPACK_PACKAGE_NAME videowallpaper)
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Video desktop wallpaper for wlr-layer-shell Wayland compositors")
+    set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/sdutwsl/DesktopVideo")
+    set(CPACK_PACKAGE_CONTACT "sdutwsl")
+    set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+    set(CPACK_DEBIAN_PACKAGE_SECTION x11)
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    include(CPack)
 endif()
