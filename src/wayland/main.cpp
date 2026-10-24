@@ -34,9 +34,12 @@ namespace {
 void showMainWindow()
 {
     pid_t pid = 0;
-    char command[] = "videowallpaper-ui";
-    char* args[] = {command, nullptr};
-    if (posix_spawnp(&pid, command, nullptr, nullptr, args, environ) != 0)
+    std::error_code error;
+    const auto executable = std::filesystem::read_symlink("/proc/self/exe", error);
+    const auto sibling = executable.parent_path() / "videowallpaper-ui";
+    std::string command = !error && std::filesystem::exists(sibling) ? sibling.string() : "videowallpaper-ui";
+    char* args[] = {command.data(), nullptr};
+    if (posix_spawnp(&pid, command.c_str(), nullptr, nullptr, args, environ) != 0)
         fputs("[ui] videowallpaper-ui is not installed; see README for GUI setup\n", stderr);
     else
         std::thread([pid] { while (waitpid(pid, nullptr, 0) < 0 && errno == EINTR) {} }).detach();
