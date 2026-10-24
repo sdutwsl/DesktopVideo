@@ -4,6 +4,8 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <vector>
 
 namespace vw {
 
@@ -20,21 +22,37 @@ MpvPlayer::MpvPlayer(const OnlineOptions& online)
     if (!online.format.empty()) setOption("ytdl-format", online.format.c_str());
     // Use typed map options so commas, spaces and Windows drive letters in paths
     // are never interpreted as mpv's option-list separators.
-    auto setMap = [&](const char* option, const char* key, const std::string& value) {
-        if (value.empty()) return;
-        char* keys[] = {const_cast<char*>(key)};
-        mpv_node item{};
-        item.format = MPV_FORMAT_STRING;
-        item.u.string = const_cast<char*>(value.c_str());
-        mpv_node_list list{1, &item, keys};
+    auto setMap = [&](const char* option, std::vector<std::pair<const char*, std::string>> entries) {
+        std::vector<char*> keys;
+        std::vector<mpv_node> items;
+        for (auto& [key, value] : entries) {
+            if (value.empty()) continue;
+            keys.push_back(const_cast<char*>(key));
+            mpv_node item{};
+            item.format = MPV_FORMAT_STRING;
+            item.u.string = value.data();
+            items.push_back(item);
+        }
+        if (items.empty()) return;
+        mpv_node_list list{static_cast<int>(items.size()), items.data(), keys.data()};
         mpv_node node{};
         node.format = MPV_FORMAT_NODE_MAP;
         node.u.list = &list;
         if (mpv_set_option(mpv_, option, MPV_FORMAT_NODE, &node) < 0)
             lastError_ = std::string("Cannot configure ") + option;
     };
-    setMap("script-opts", "ytdl_hook-ytdl_path", online.extractorPath);
-    setMap("ytdl-raw-options", "cookies", online.cookieFile);
+    setMap("script-opts", {{"ytdl_hook-ytdl_path", online.extractorPath}});
+    std::string jsRuntime;
+    if (!online.extractorPath.empty()) {
+        std::error_code error;
+        auto deno = std::filesystem::u8path(online.extractorPath).parent_path() / "deno";
+        if (!std::filesystem::is_regular_file(deno, error)) deno += ".exe";
+        if (std::filesystem::is_regular_file(deno, error)) {
+            const auto path = deno.generic_u8string();
+            jsRuntime = "deno:" + std::string(reinterpret_cast<const char*>(path.data()), path.size());
+        }
+    }
+    setMap("ytdl-raw-options", {{"cookies", online.cookieFile}, {"js-runtimes", jsRuntime}});
     setOption("idle", "yes");
     setOption("loop-file", "inf");
     setOption("keepaspect", "yes");

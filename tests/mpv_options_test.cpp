@@ -2,6 +2,9 @@
 #include <mpv/client.h>
 #include <cassert>
 #include <string>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
 
 static std::string option(vw::MpvPlayer& player, const char* name, const char* key)
 {
@@ -29,4 +32,26 @@ int main()
     assert(player.initialize());
     assert(option(player, "options/script-opts", "ytdl_hook-ytdl_path") == extractor);
     assert(option(player, "options/ytdl-raw-options", "cookies") == cookie);
+
+    // Both options must survive in the same map when the portable JS runtime
+    // is present, including paths containing mpv's list separators.
+    auto directory = std::filesystem::temp_directory_path() /
+        ("videowallpaper-options," + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(directory);
+    auto deno = directory / "deno.exe";
+    std::ofstream(deno).close();
+    const auto extractorUtf8 = (directory / "yt-dlp.exe").generic_u8string();
+    const auto denoUtf8 = deno.generic_u8string();
+    {
+        vw::MpvPlayer portable({std::string(reinterpret_cast<const char*>(extractorUtf8.data()), extractorUtf8.size()), cookie, ""});
+        assert(portable.lastError().empty());
+        portable.setOption("vo", "null");
+        portable.setOption("ao", "null");
+        assert(portable.initialize());
+        assert(option(portable, "options/ytdl-raw-options", "cookies") == cookie);
+        assert(option(portable, "options/ytdl-raw-options", "js-runtimes") ==
+            "deno:" + std::string(reinterpret_cast<const char*>(denoUtf8.data()), denoUtf8.size()));
+    }
+    std::filesystem::remove(deno);
+    std::filesystem::remove(directory);
 }
