@@ -8,7 +8,8 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "gui"))
-from PySide6.QtCore import QCoreApplication, QEvent, QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QPoint, Qt, QUrl
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWebEngineCore import QWebEnginePage
 from main import MainWindow
@@ -61,6 +62,33 @@ def test_window_play_to_monitor_and_navigation_policy(application, tmp_path):
         assert len(clicked) == 1
         assert not window.page.acceptNavigationRequest(QUrl("file:///secret"), QWebEnginePage.NavigationType.NavigationTypeOther, True)
         assert len(window.page.scripts().find("wallpaper-video-click")) == 1
+        drain(application, lambda: window.jobs.pending == 0)
+    finally:
+        window.close()
+        window.web.setPage(QWebEnginePage(window.web))
+        window.page.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def test_embedded_video_click_reaches_backend(application, tmp_path):
+    backend = FakeBackend()
+    window = MainWindow(backend, tmp_path, smoke=True)
+    window.extractor.setText("yt-dlp")
+    loaded = []
+    window.web.loadFinished.connect(loaded.append)
+    window.show()
+    window.web.setHtml("""<html><body style="margin:0"><a style="display:block;width:300px;height:100px"
+        href="https://www.youtube.com/watch?v=0123456789_">Play video</a></body></html>""",
+        QUrl("https://www.youtube.com/"))
+    try:
+        drain(application, lambda: bool(loaded) and loaded[-1])
+        QTest.qWait(150)
+        target = window.web.focusProxy() or window.web
+        QTest.mouseClick(target, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(60, 30))
+        drain(application, lambda: any(call[0] == "set" for call in backend.calls))
+        assert backend.calls[-1] == ("set", ("https://www.youtube.com/watch?v=0123456789_", ""))
         drain(application, lambda: window.jobs.pending == 0)
     finally:
         window.close()
