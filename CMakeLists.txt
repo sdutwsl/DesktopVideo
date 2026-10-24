@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 # The single version number: the Nix package reads it from here, and release tags must be v<VERSION>.
-project(VideoWallpaper VERSION 2.0.0 LANGUAGES C CXX)
+project(VideoWallpaper VERSION 2.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,6 +9,21 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(vw_control_test
+        tests/control_test.cpp tests/FakeMpv.cpp
+        src/core/Config.cpp src/core/Wallpaper.cpp src/core/AppControl.cpp)
+    target_include_directories(vw_control_test PRIVATE src)
+    target_compile_options(vw_control_test PRIVATE -Wall -Wextra -UNDEBUG)
+    if(WIN32)
+        target_sources(vw_control_test PRIVATE src/win/ControlPipe.cpp)
+        target_compile_definitions(vw_control_test PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+        target_link_libraries(vw_control_test PRIVATE user32 advapi32)
+    endif()
+    add_test(NAME controller COMMAND vw_control_test)
 endif()
 
 if(MSVC)
@@ -20,6 +35,7 @@ find_package(Mpv REQUIRED)
 
 # ---- shared core -------------------------------------------------------------
 add_library(vw_core STATIC
+    src/core/AppControl.cpp
     src/core/Config.cpp
     src/core/Menu.cpp
     src/core/MpvPlayer.cpp
@@ -29,11 +45,19 @@ target_include_directories(vw_core PUBLIC src)
 target_link_libraries(vw_core PUBLIC Mpv::Mpv)
 target_compile_options(vw_core PUBLIC -Wall -Wextra)
 
+if(BUILD_TESTING)
+    add_executable(vw_mpv_options_test tests/mpv_options_test.cpp)
+    target_link_libraries(vw_mpv_options_test PRIVATE vw_core)
+    target_compile_options(vw_mpv_options_test PRIVATE -UNDEBUG)
+    add_test(NAME mpv-options COMMAND vw_mpv_options_test)
+endif()
+
 # ---- Windows: WorkerW + Shell_NotifyIcon ---------------------------------------
 if(WIN32)
     add_executable(videowallpaper WIN32
         src/win/main.cpp
         src/win/DesktopSurface.cpp
+        src/win/ControlPipe.cpp
         src/win/VideoWallpaper.rc
     )
     # Version.h feeds the version resource in VideoWallpaper.rc.
@@ -43,7 +67,7 @@ if(WIN32)
 " @ONLY)
     target_include_directories(videowallpaper PRIVATE src/win "${CMAKE_CURRENT_BINARY_DIR}")
     target_compile_definitions(videowallpaper PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
-    target_link_libraries(videowallpaper PRIVATE vw_core user32 gdi32 shell32 comdlg32 wtsapi32 ole32)
+    target_link_libraries(videowallpaper PRIVATE vw_core user32 gdi32 shell32 comdlg32 wtsapi32 ole32 advapi32)
     target_link_options(videowallpaper PRIVATE -municode)   # wWinMain entry point
 
     # libmpv is a single DLL; put it next to the exe.
@@ -58,6 +82,10 @@ else()
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(WAYLAND REQUIRED IMPORTED_TARGET wayland-client wayland-egl egl glesv2)
     pkg_check_modules(SDBUS REQUIRED IMPORTED_TARGET sdbus-c++)
+    if(BUILD_TESTING)
+        target_sources(vw_control_test PRIVATE src/wayland/Session.cpp)
+        target_link_libraries(vw_control_test PRIVATE PkgConfig::SDBUS)
+    endif()
     pkg_get_variable(WAYLAND_SCANNER wayland-scanner wayland_scanner)
     if(NOT WAYLAND_SCANNER)
         find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)

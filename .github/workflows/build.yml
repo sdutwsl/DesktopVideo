@@ -5,7 +5,7 @@ name: build
 # with the Windows zip and the Ubuntu .deb.
 on:
   push:
-    branches: [master]
+    branches: [master, 'feature/**']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -46,6 +46,7 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja
           ninja -C build
+          ctest --test-dir build --output-on-failure
       - name: Package .deb
         run: |
           cd build
@@ -55,6 +56,10 @@ jobs:
         with:
           name: videowallpaper-ubuntu-24.04-amd64
           path: build/*.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: videowallpaper-test-host-Linux
+          path: build/vw_control_test
 
   windows:
     name: Windows (MinGW cross from Nix)
@@ -81,11 +86,83 @@ jobs:
         with:
           name: videowallpaper-windows-x64
           path: dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: videowallpaper-test-host-Windows
+          path: build-win/vw_control_test.exe
+
+  gui:
+    name: GUI (${{ matrix.os }})
+    needs: [ubuntu, windows]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install GUI build dependencies
+        run: python -m pip install -r gui/requirements.txt pyinstaller pytest
+      - name: Windows backend
+        if: runner.os == 'Windows'
+        uses: actions/download-artifact@v4
+        with:
+          name: videowallpaper-windows-x64
+          path: backend
+      - name: Windows control test host
+        if: runner.os == 'Windows'
+        uses: actions/download-artifact@v4
+        with:
+          name: videowallpaper-test-host-Windows
+          path: backend-test
+      - name: Test Windows IPC and GUI helpers
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:VW_CONTROL_TEST = "$pwd/backend-test/vw_control_test.exe"
+          python -m pytest tests -q
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          python gui/main.py --smoke-test gui-preview.png
+      - name: Ubuntu backend package
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@v4
+        with:
+          name: videowallpaper-ubuntu-24.04-amd64
+          path: backend-deb
+      - name: Install Linux runtime dependencies and extract backend
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ./backend-deb/*.deb \
+            libxcb-cursor0 libxkbcommon-x11-0 libnss3 libasound2t64 libegl1
+          mkdir backend
+          cp "$(command -v videowallpaper)" backend/
+      - name: Linux control test host
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@v4
+        with:
+          name: videowallpaper-test-host-Linux
+          path: backend-test
+      - name: Test Linux D-Bus and GUI helpers
+        if: runner.os == 'Linux'
+        run: |
+          chmod +x backend-test/vw_control_test
+          VW_CONTROL_TEST="$PWD/backend-test/vw_control_test" dbus-run-session -- \
+            python -m pytest tests/test_session.py tests/test_windows_pipe.py -q
+      - name: Package GUI, yt-dlp and Deno
+        run: python gui/package.py --backend-dir backend
+      - uses: actions/upload-artifact@v4
+        with:
+          name: videowallpaper-gui-${{ runner.os }}-x64
+          path: dist/gui/videowallpaper-ui/
 
   release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [nix, ubuntu, windows]
+    needs: [nix, ubuntu, windows, gui]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -105,8 +182,10 @@ jobs:
       - name: Assemble assets
         run: |
           mkdir -p assets
-          (cd artifacts/videowallpaper-windows-x64 &&
-            zip -9 "$GITHUB_WORKSPACE/assets/videowallpaper-${GITHUB_REF_NAME}-windows-x64.zip" videowallpaper.exe libmpv-2.dll)
+          (cd artifacts/videowallpaper-gui-Windows-x64 &&
+            zip -qr9 "$GITHUB_WORKSPACE/assets/videowallpaper-${GITHUB_REF_NAME}-windows-x64.zip" .)
+          tar -czf "assets/videowallpaper-${GITHUB_REF_NAME}-linux-gui-x64.tar.gz" \
+            -C artifacts/videowallpaper-gui-Linux-x64 .
           cp artifacts/videowallpaper-ubuntu-24.04-amd64/*.deb \
             "assets/videowallpaper-${GITHUB_REF_NAME}-ubuntu-24.04-amd64.deb"
           (cd assets && sha256sum -- * > SHA256SUMS)

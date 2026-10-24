@@ -13,6 +13,9 @@
 #include <signal.h>
 #include <sys/signalfd.h>
 #include <unistd.h>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <cerrno>
 
 #include <cstdio>
 #include <cstdlib>
@@ -20,10 +23,30 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#include <thread>
 
 using namespace vw;
 
+extern char** environ;
+
 namespace {
+
+void showMainWindow()
+{
+    pid_t pid = 0;
+    char command[] = "videowallpaper-ui";
+    char* args[] = {command, nullptr};
+    if (posix_spawnp(&pid, command, nullptr, nullptr, args, environ) != 0)
+        fputs("[ui] videowallpaper-ui is not installed; see README for GUI setup\n", stderr);
+    else
+        std::thread([pid] { while (waitpid(pid, nullptr, 0) < 0 && errno == EINTR) {} }).detach();
+}
+
+std::string videoSource(const std::string& value)
+{
+    if (value.starts_with("https://") || value.starts_with("http://")) return value;
+    return std::filesystem::absolute(value).string();
+}
 
 void usage()
 {
@@ -62,7 +85,7 @@ int forward(sdbus::IConnection& bus, const std::vector<std::string>& args)
             fputs("videowallpaper is already running\n", stderr);
             return 1;
         } else if (cmd == "set" && args.size() >= 2) {
-            call("SetVideo", std::filesystem::absolute(args[1]).string(), args.size() > 2 ? args[2] : "");
+            call("SetVideo", videoSource(args[1]), args.size() > 2 ? args[2] : "");
         } else if (cmd == "choose") {
             call("ChooseVideo", args.size() > 1 ? args[1] : "");
         } else if (cmd == "pause" || cmd == "resume") {
@@ -78,8 +101,8 @@ int forward(sdbus::IConnection& bus, const std::vector<std::string>& args)
                 puts(n.c_str());
         } else if (cmd == "quit") {
             call("Quit");
-        } else if (std::filesystem::is_regular_file(cmd)) {
-            call("SetVideo", std::filesystem::absolute(cmd).string(), std::string());
+        } else if (cmd.starts_with("https://") || cmd.starts_with("http://") || std::filesystem::is_regular_file(cmd)) {
+            call("SetVideo", videoSource(cmd), std::string());
         } else {
             usage();
             return 2;
@@ -145,6 +168,11 @@ int main(int argc, char** argv)
         else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
             usage();
             return 0;
+        } else if (!strcmp(argv[i], "--background")) {
+            // Accepted on both platforms so the GUI can start the daemon uniformly.
+        } else if (!strcmp(argv[i], "ui")) {
+            showMainWindow();
+            return 0;
         } else
             args.push_back(argv[i]);
     }
@@ -166,9 +194,9 @@ int main(int argc, char** argv)
     if (!args.empty()) {
         const std::string& cmd = args[0];
         if (cmd == "set" && args.size() >= 2 && args.size() == 2)
-            initialVideo = std::filesystem::absolute(args[1]).string();
-        else if (std::filesystem::is_regular_file(cmd))
-            initialVideo = std::filesystem::absolute(cmd).string();
+            initialVideo = videoSource(args[1]);
+        else if (cmd.starts_with("https://") || cmd.starts_with("http://") || std::filesystem::is_regular_file(cmd))
+            initialVideo = videoSource(cmd);
         else {
             fputs("videowallpaper: daemon is not running\n", stderr);
             return 1;
@@ -210,6 +238,7 @@ int main(int argc, char** argv)
     MenuActions actions;
     std::function<void()> rebuildMenu;
     actions.quit = [&] { loop.quit(); };
+    actions.showMainWindow = showMainWindow;
     actions.chooseVideo = [&](const std::string& monitor) {
         chooser.open(monitor.empty() ? "选择壁纸视频" : "选择 " + monitor + " 的壁纸视频", [&, monitor](std::string path) {
             if (!path.empty())
@@ -241,6 +270,7 @@ int main(int argc, char** argv)
     sessionMonitor.onSleep = [&](bool sleeping) { wallpaper.setSuspended(sleeping); };
     sessionMonitor.onShutdown = [&] { loop.quit(); };
 
+    AppControl appControl(wallpaper, config, [&] { loop.quit(); });
     Control control(*session, {
         [&](std::string path, std::string monitor) { wallpaper.setVideo(path, monitor); rebuildMenu(); },
         [&](std::string monitor) { actions.chooseVideo(monitor); },
@@ -254,7 +284,7 @@ int main(int argc, char** argv)
                 names.push_back(m.id);
             return names;
         },
-    });
+    }, appControl);
 
     SignalSource signals([&] { loop.quit(); });
     loop.add(&signals);

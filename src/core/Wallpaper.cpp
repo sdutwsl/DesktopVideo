@@ -59,7 +59,8 @@ void Wallpaper::refreshMonitors()
         slot->surface = platform_.createSurface(m);
         if (!slot->surface)
             continue;
-        slot->player = std::make_unique<MpvPlayer>();
+        slot->player = std::make_unique<MpvPlayer>(OnlineOptions{
+            config_.get("ytdlp_path"), config_.get("cookies_file"), config_.get("ytdlp_format")});
         slot->surface->attach(*slot->player);
         openSlot(*slot);
         slots_.push_back(std::move(slot));
@@ -190,6 +191,14 @@ std::vector<MonitorInfo> Wallpaper::monitors() const
 void Wallpaper::shutdown()
 {
     slots_.clear();
+}
+
+std::string Wallpaper::lastError() const
+{
+    for (const auto& slot : slots_)
+        if (!slot->player->lastError().empty())
+            return slot->monitor.id + ": " + slot->player->lastError();
+    return {};
 }
 
 Wallpaper::Slot* Wallpaper::find(const std::string& monitorId)

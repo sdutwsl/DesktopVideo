@@ -1,6 +1,6 @@
 # Cross-compile the Windows build from Linux with mingw-w64:
 #   cmake -S . -B build-win -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-toolchain.cmake \
-#         -DLIBVLC_SDK_DIR=/path/to/vlc-3.0.x/sdk
+#         -DMPV_SDK_DIR=/path/to/mpv-dev
 set(CMAKE_SYSTEM_NAME Windows)
 set(CMAKE_SYSTEM_PROCESSOR x86_64)
 set(triple x86_64-w64-mingw32)

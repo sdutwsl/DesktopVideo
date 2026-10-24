@@ -121,10 +121,12 @@ const char* Control::SERVICE = "org.videowallpaper.Daemon";
 const char* Control::PATH = "/org/videowallpaper/Daemon";
 const char* Control::INTERFACE = "org.videowallpaper.Daemon";
 
-Control::Control(sdbus::IConnection& bus, Handlers handlers) : handlers_(std::move(handlers))
+Control::Control(sdbus::IConnection& bus, Handlers handlers, AppControl& appControl) : handlers_(std::move(handlers))
 {
     object_ = sdbus::createObject(bus, PATH);
     auto& o = *object_;
+    o.registerMethod("Execute").onInterface(INTERFACE).implementedAs(
+        [&appControl](std::string request) { return appControl.execute(request); });
     o.registerMethod("SetVideo").onInterface(INTERFACE).implementedAs(
         [this](std::string path, std::string monitor) { handlers_.setVideo(path, monitor); });
     o.registerMethod("ChooseVideo").onInterface(INTERFACE).implementedAs(

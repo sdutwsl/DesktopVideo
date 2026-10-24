@@ -19,3 +19,15 @@ result-*
 .idea/
 .vscode/
 *.swp
+
+# Python GUI development and packaging
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+dist/
+*.spec
+/build-*.exe
+/build-*.pdb
+/build-*.png
+/build-*.log

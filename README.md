@@ -13,11 +13,26 @@ A video wallpaper player: shared libmpv core, native shells for Wayland (layer-s
 
 ## 功能
 
+- 主界面：内嵌 YouTube 网页，点击视频直接播放到桌面；支持网址输入、本地文件、多屏选择和播放控制
+- yt-dlp 在线解析，支持导入 Chrome / Edge / Firefox 等浏览器的登录 Cookie，内嵌网页独立保存登录状态
+
 - 多显示器：每个显示器一个播放器，可分别指定视频；只有主屏出声
 - 循环播放、按屏幕比例裁切铺满
 - 锁屏、休眠时暂停，关机前退出
 - 托盘菜单：选择视频、暂停、静音、退出；Linux 另有命令行 / D-Bus 控制
 - 配置持久化（`key=value` 文本文件）
+
+## 主界面与 YouTube
+
+Windows 完整包运行 `videowallpaper-ui.exe`；Linux GUI 便携包运行 `videowallpaper-ui`，
+Nix 包运行 `videowallpaper ui`。主界面会自动启动 C++ 后端，关闭窗口后壁纸继续播放。
+Ubuntu 的 `.deb` 提供后端，图形界面另见同一 Release 的 `linux-gui-x64.tar.gz`。
+
+内嵌网页支持在结果列表点击视频后直接投到桌面，也可以取消“点击网页视频”选项，进入视频后点“播放当前视频”。
+会话导入使用 yt-dlp，**不能保证读取 Windows Chrome/Edge 的加密 Cookie**；遇到限制可以导入 `cookies.txt`，
+或在应用自己的网页里登录。应用不会直接复用或修改正在运行的浏览器配置目录。
+
+开发运行、Cookie 保存位置和打包方式见 [gui/README.md](gui/README.md)。
 
 ## Linux（Wayland）
 
@@ -62,6 +77,8 @@ sudo ninja -C build install   # 可选，装到 /usr/local
 videowallpaper                    # 启动守护进程（托盘里选视频）
 videowallpaper ~/Videos/a.mp4     # 启动并使用该视频
 videowallpaper set a.mp4 DP-2     # 只给 DP-2 换视频
+videowallpaper set 'https://www.youtube.com/watch?v=VIDEO_ID' # 网络视频（需要 yt-dlp）
+videowallpaper ui                 # 打开已安装的图形界面
 videowallpaper pause | resume | mute | unmute | volume 40 | monitors | quit
 VW_DEBUG=1 videowallpaper         # 打印渲染和 mpv 的详细日志
 ```
@@ -124,6 +141,9 @@ volume=50
 mute=0
 pause_when_locked=1
 audio_monitor=DP-1             # 哪个显示器出声，留空用主屏
+ytdlp_path=/path/to/yt-dlp     # 在线解析器，留空使用 PATH
+cookies_file=/path/cookies.txt # 由主界面维护，只含 YouTube 域的 Cookie
+ytdlp_format=                 # 可选的 yt-dlp 画质表达式
 ```
 
 ## 发布

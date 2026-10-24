@@ -42,6 +42,7 @@ public:
     bool mute() const;
 
     std::vector<MonitorInfo> monitors() const;
+    std::string lastError() const;
 
     // Stop all players; called before the platform tears down its display connection.
     void shutdown();

@@ -18,7 +18,7 @@ Config::Config(std::string path) : path_(std::move(path)) {}
 
 bool Config::load()
 {
-    std::ifstream in(path_);
+    std::ifstream in(std::filesystem::u8path(path_));
     if (!in)
         return false;
     values_.clear();
@@ -38,8 +38,8 @@ bool Config::load()
 bool Config::save() const
 {
     std::error_code ec;
-    std::filesystem::create_directories(std::filesystem::path(path_).parent_path(), ec);
-    std::ofstream out(path_, std::ios::trunc);
+    std::filesystem::create_directories(std::filesystem::u8path(path_).parent_path(), ec);
+    std::ofstream out(std::filesystem::u8path(path_), std::ios::trunc);
     if (!out)
         return false;
     for (const auto& [key, value] : values_)
