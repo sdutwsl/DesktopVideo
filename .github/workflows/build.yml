@@ -180,6 +180,14 @@ jobs:
           python-version: '3.12'
       - name: Install GUI build dependencies
         run: python -m pip install -r gui/requirements.txt pyinstaller pytest
+      - name: Prepare private Linux Qt runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p qt-runtime
+          cd qt-runtime
+          apt-get download libegl1 libgl1 libglvnd0 libglx0 libxcb-cursor0 libxkbcommon-x11-0 libnss3 libasound2t64
+          for deb in ./*.deb; do dpkg-deb -x "$deb" .; done
+          echo "LD_LIBRARY_PATH=$PWD/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
       - name: Download Windows backend
         if: runner.os == 'Windows'
         uses: actions/download-artifact@v4
