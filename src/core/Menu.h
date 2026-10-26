@@ -27,6 +27,7 @@ struct MenuItem {
 class Wallpaper;
 
 struct MenuActions {
+    std::function<void()> showMainWindow;
     std::function<void(const std::string& monitorId)> chooseVideo;   // "" = every monitor
     std::function<void()> quit;
 };

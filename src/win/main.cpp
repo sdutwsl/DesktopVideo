@@ -2,7 +2,9 @@
 // WorkerW (below the desktop icons); a Shell_NotifyIcon tray menu controls it.
 
 #include "DesktopSurface.h"
+#include "ControlPipe.h"
 #include "Resource.h"
+#include "core/AppControl.h"
 #include "core/Config.h"
 #include "core/Menu.h"
 #include "core/Wallpaper.h"
@@ -14,6 +16,7 @@
 #include <wtsapi32.h>
 
 #include <functional>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
@@ -35,8 +38,29 @@ struct App {
     std::unique_ptr<WinPlatform> platform;
     std::unique_ptr<Wallpaper> wallpaper;
     MenuActions actions;
+    std::unique_ptr<AppControl> control;
+    std::unique_ptr<ControlPipe> pipe;
 };
 App app;
+
+std::filesystem::path uiPath()
+{
+    wchar_t executable[32768] = {0};
+    GetModuleFileNameW(nullptr, executable, 32768);
+    return std::filesystem::path(executable).parent_path() / L"muralop-ui.exe";
+}
+
+bool uiAvailable()
+{
+    return std::filesystem::is_regular_file(uiPath());
+}
+
+void showMainWindow()
+{
+    const auto ui = uiPath();
+    if (reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", ui.c_str(), nullptr, nullptr, SW_SHOWNORMAL)) <= 32)
+        MessageBoxW(app.hwnd, L"无法打开 Muralop 主界面。", L"Muralop", MB_OK | MB_ICONERROR);
+}
 
 // Portable mode: a config.ini next to the exe (the portable zip ships one) keeps the
 // settings in that folder; otherwise they live in %APPDATA%\Muralop.
@@ -154,6 +178,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         return 0;
     }
     switch (msg) {
+    case ControlPipe::Message:
+        if (app.pipe) app.pipe->dispatch();
+        return 0;
+    case WM_CLOSE:
+        DestroyWindow(hwnd);
+        return 0;
     case WMAPP_TRAY:
         switch (LOWORD(lParam)) {
         case WM_CONTEXTMENU:
@@ -215,7 +245,10 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR cmdLine, int)
 {
     HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Muralop.SingleInstance");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        MessageBoxW(nullptr, L"Muralop 已经在运行，看看托盘图标。", L"Muralop", MB_OK | MB_ICONINFORMATION);
+        if (!wcsstr(cmdLine, L"--background") && uiAvailable()) showMainWindow();
+        else if (!wcsstr(cmdLine, L"--background"))
+            MessageBoxW(nullptr, L"Muralop 已经在运行，看看托盘图标。", L"Muralop", MB_OK | MB_ICONINFORMATION);
+        CloseHandle(mutex);
         return 0;
     }
     enablePerMonitorDpi();
@@ -239,6 +272,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR cmdLine, int)
     app.wallpaper = std::make_unique<Wallpaper>(*app.platform, *app.config);
 
     app.actions.quit = [] { DestroyWindow(app.hwnd); };
+    if (uiAvailable()) app.actions.showMainWindow = showMainWindow;
     app.actions.chooseVideo = [](const std::string& monitor) {
         const std::string path = openVideoDialog(monitor.empty() ? L"选择壁纸视频" : L"选择 " + toWide(monitor) + L" 的壁纸视频");
         if (!path.empty())
@@ -261,8 +295,17 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR cmdLine, int)
     trayIcon(true);
     WTSRegisterSessionNotification(app.hwnd, NOTIFY_FOR_THIS_SESSION);
 
+    app.control = std::make_unique<AppControl>(*app.wallpaper, *app.config, [] { PostMessageW(app.hwnd, WM_CLOSE, 0, 0); });
+    try {
+        app.pipe = std::make_unique<ControlPipe>(app.hwnd, *app.control);
+    } catch (const std::exception& e) {
+        MessageBoxW(app.hwnd, toWide(e.what()).c_str(), L"Muralop", MB_OK | MB_ICONERROR);
+    }
+
     app.wallpaper->refreshMonitors();
-    if (app.wallpaper->videoFor("").empty())
+    if (!wcsstr(cmdLine, L"--background") && uiAvailable())
+        showMainWindow();
+    else if (app.wallpaper->videoFor("").empty() && !wcsstr(cmdLine, L"--background"))
         app.actions.chooseVideo("");
 
     MSG msg;
@@ -273,6 +316,8 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR cmdLine, int)
 
     WTSUnRegisterSessionNotification(app.hwnd);
     trayIcon(false);
+    app.pipe.reset();
+    app.control.reset();
     app.wallpaper.reset();     // stops players, destroys the surfaces
     app.platform.reset();      // hides the WorkerW so Explorer's wallpaper returns
     CloseHandle(mutex);

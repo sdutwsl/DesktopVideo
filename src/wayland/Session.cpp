@@ -125,10 +125,12 @@ const char* Control::SERVICE = "org.muralop.Daemon";
 const char* Control::PATH = "/org/muralop/Daemon";
 const char* Control::INTERFACE = "org.muralop.Daemon";
 
-Control::Control(sdbus::IConnection& bus, Handlers handlers) : handlers_(std::move(handlers))
+Control::Control(sdbus::IConnection& bus, Handlers handlers, AppControl& appControl) : handlers_(std::move(handlers))
 {
     object_ = sdbus::createObject(bus, sdbus::ObjectPath(PATH));
     object_->addVTable(
+        sdbus::registerMethod("Execute").implementedAs(
+            [&appControl](std::string request) { return appControl.execute(request); }),
         sdbus::registerMethod("SetVideo").implementedAs(
             [this](std::string path, std::string monitor) { handlers_.setVideo(path, monitor); }),
         sdbus::registerMethod("ChooseVideo").implementedAs([this](std::string monitor) { handlers_.chooseVideo(monitor); }),

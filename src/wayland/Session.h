@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/AppControl.h"
+
 #include <sdbus-c++/sdbus-c++.h>
 
 #include <functional>
@@ -56,7 +58,7 @@ public:
         std::function<std::vector<std::string>()> monitors;
     };
 
-    Control(sdbus::IConnection& bus, Handlers handlers);
+    Control(sdbus::IConnection& bus, Handlers handlers, AppControl& appControl);
 
 private:
     std::unique_ptr<sdbus::IObject> object_;

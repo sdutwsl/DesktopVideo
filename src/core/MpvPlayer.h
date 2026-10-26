@@ -9,12 +9,18 @@ struct mpv_handle;
 
 namespace muralop {
 
+struct OnlineOptions {
+    std::string extractorPath;
+    std::string cookieFile;
+    std::string format;
+};
+
 // Thin wrapper around one libmpv core. Video goes either into a native window
 // (Windows HWND, mpv renders itself) or through mpv's render API into a GL
 // surface we own (Wayland); the surface picks one in Surface::attach().
 class MpvPlayer {
 public:
-    MpvPlayer();
+    explicit MpvPlayer(const OnlineOptions& online = {});
     ~MpvPlayer();
     MpvPlayer(const MpvPlayer&) = delete;
     MpvPlayer& operator=(const MpvPlayer&) = delete;
@@ -39,12 +45,14 @@ public:
     void setMute(bool mute);
 
     const std::string& path() const { return path_; }
+    const std::string& lastError() const { return lastError_; }
 
 private:
     static void wakeupCb(void* self);
 
     mpv_handle* mpv_ = nullptr;
     std::string path_;
+    std::string lastError_;
     std::mutex wakeupMutex_;
     std::function<void()> wakeup_;
 };

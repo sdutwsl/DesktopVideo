@@ -4,10 +4,12 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <vector>
 
 namespace muralop {
 
-MpvPlayer::MpvPlayer()
+MpvPlayer::MpvPlayer(const OnlineOptions& online)
 {
     mpv_ = mpv_create();
     if (!mpv_)
@@ -15,6 +17,42 @@ MpvPlayer::MpvPlayer()
     // A wallpaper: loop forever, fill the screen (crop instead of letterbox), never
     // react to input or draw OSD, and do not read the user's mpv.conf.
     setOption("config", "no");
+    setOption("load-scripts", "no");
+    setOption("ytdl", "yes");
+    if (!online.format.empty()) setOption("ytdl-format", online.format.c_str());
+    // Use typed map options so commas, spaces and Windows drive letters in paths
+    // are never interpreted as mpv's option-list separators.
+    auto setMap = [&](const char* option, std::vector<std::pair<const char*, std::string>> entries) {
+        std::vector<char*> keys;
+        std::vector<mpv_node> items;
+        for (auto& [key, value] : entries) {
+            if (value.empty()) continue;
+            keys.push_back(const_cast<char*>(key));
+            mpv_node item{};
+            item.format = MPV_FORMAT_STRING;
+            item.u.string = value.data();
+            items.push_back(item);
+        }
+        if (items.empty()) return;
+        mpv_node_list list{static_cast<int>(items.size()), items.data(), keys.data()};
+        mpv_node node{};
+        node.format = MPV_FORMAT_NODE_MAP;
+        node.u.list = &list;
+        if (mpv_set_option(mpv_, option, MPV_FORMAT_NODE, &node) < 0)
+            lastError_ = std::string("Cannot configure ") + option;
+    };
+    setMap("script-opts", {{"ytdl_hook-ytdl_path", online.extractorPath}});
+    std::string jsRuntime;
+    if (!online.extractorPath.empty()) {
+        std::error_code error;
+        auto deno = std::filesystem::u8path(online.extractorPath).parent_path() / "deno";
+        if (!std::filesystem::is_regular_file(deno, error)) deno += ".exe";
+        if (std::filesystem::is_regular_file(deno, error)) {
+            const auto path = deno.generic_u8string();
+            jsRuntime = "deno:" + std::string(reinterpret_cast<const char*>(path.data()), path.size());
+        }
+    }
+    setMap("ytdl-raw-options", {{"cookies", online.cookieFile}, {"js-runtimes", jsRuntime}});
     setOption("idle", "yes");
     setOption("loop-file", "inf");
     setOption("keepaspect", "yes");
@@ -74,6 +112,7 @@ bool MpvPlayer::initialize()
         return false;
     const int err = mpv_initialize(mpv_);
     if (err < 0) {
+        lastError_ = mpv_error_string(err);
         fprintf(stderr, "[mpv] initialisation failed: %s\n", mpv_error_string(err));
         return false;
     }
@@ -93,8 +132,10 @@ void MpvPlayer::processEvents()
             fprintf(stderr, "[mpv/%s] %s", msg->prefix, msg->text);
         } else if (ev->event_id == MPV_EVENT_END_FILE) {
             auto* end = static_cast<mpv_event_end_file*>(ev->data);
-            if (end->reason == MPV_END_FILE_REASON_ERROR)
+            if (end->reason == MPV_END_FILE_REASON_ERROR) {
+                lastError_ = mpv_error_string(end->error);
                 fprintf(stderr, "[mpv] cannot play %s: %s\n", path_.c_str(), mpv_error_string(end->error));
+            }
         }
     }
 }
@@ -107,6 +148,7 @@ bool MpvPlayer::open(const std::string& path, bool withAudio)
     mpv_set_property_string(mpv_, "aid", withAudio ? "auto" : "no");
     const char* cmd[] = {"loadfile", path.c_str(), nullptr};
     path_ = path;
+    lastError_.clear();
     return mpv_command(mpv_, cmd) >= 0;
 }
 

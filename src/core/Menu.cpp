@@ -8,6 +8,14 @@ std::vector<MenuItem> buildAppMenu(Wallpaper& wallpaper, const MenuActions& acti
     std::vector<MenuItem> menu;
     const std::vector<MonitorInfo> monitors = wallpaper.monitors();
 
+    if (actions.showMainWindow) {
+        MenuItem show;
+        show.label = "打开主界面…";
+        show.activate = actions.showMainWindow;
+        menu.push_back(show);
+        menu.push_back(MenuItem::Separator());
+    }
+
     MenuItem choose;
     choose.label = monitors.size() > 1 ? "选择视频（所有显示器）…" : "选择视频…";
     choose.activate = [=] { actions.chooseVideo(""); };
