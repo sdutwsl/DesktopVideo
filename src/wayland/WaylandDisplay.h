@@ -18,7 +18,7 @@ struct zxdg_output_v1;
 struct wp_viewporter;
 struct wp_fractional_scale_manager_v1;
 
-namespace vw {
+namespace muralop {
 
 struct Output {
     uint32_t globalName = 0;
@@ -34,7 +34,7 @@ struct Output {
 };
 
 // Connection to the compositor plus the globals the wallpaper needs. Also the
-// vw::Platform implementation: monitors are outputs, surfaces are layer surfaces.
+// muralop::Platform implementation: monitors are outputs, surfaces are layer surfaces.
 class WaylandDisplay : public Platform, public EventLoop::Source {
 public:
     explicit WaylandDisplay(EventLoop& loop);
@@ -94,4 +94,4 @@ private:
     bool connected_ = false;
 };
 
-} // namespace vw
+} // namespace muralop

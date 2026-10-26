@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <fstream>
 
-namespace vw {
+namespace muralop {
 
 static std::string trim(const std::string& s)
 {
@@ -21,11 +21,18 @@ static std::filesystem::path fsPath(const std::string& utf8)
     return std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));
 }
 
-Config::Config(std::string path) : path_(std::move(path)) {}
+Config::Config(std::string path, std::string legacyPath)
+    : path_(std::move(path)), legacyPath_(std::move(legacyPath)) {}
 
 bool Config::load()
 {
     std::ifstream in(fsPath(path_));
+    bool fromLegacy = false;
+    if (!in && !legacyPath_.empty()) {
+        in.clear();
+        in.open(fsPath(legacyPath_));
+        fromLegacy = bool(in);
+    }
     if (!in)
         return false;
     values_.clear();
@@ -39,7 +46,9 @@ bool Config::load()
             continue;
         values_[trim(line.substr(0, eq))] = trim(line.substr(eq + 1));
     }
-    return true;
+    // Copy settings to the new app directory after a rename. Keep the old file
+    // untouched so an older installation can still use it.
+    return !fromLegacy || save();
 }
 
 bool Config::save() const
@@ -85,4 +94,4 @@ void Config::set(const std::string& key, int value) { values_[key] = std::to_str
 void Config::set(const std::string& key, bool value) { values_[key] = value ? "1" : "0"; }
 void Config::erase(const std::string& key) { values_.erase(key); }
 
-} // namespace vw
+} // namespace muralop

@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace vw {
+namespace muralop {
 
 // Lock screen, suspend and shutdown notifications from the desktop's D-Bus services.
 class SessionMonitor {
@@ -63,4 +63,4 @@ private:
     Handlers handlers_;
 };
 
-} // namespace vw
+} // namespace muralop

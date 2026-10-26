@@ -14,10 +14,10 @@
 }:
 
 stdenv.mkDerivation {
-  pname = "videowallpaper";
+  pname = "muralop";
   # project(... VERSION x.y.z) in CMakeLists.txt is the only place the version is set.
   version = builtins.head (
-    builtins.match ".*project\\(VideoWallpaper VERSION ([0-9.]+).*" (builtins.readFile ../CMakeLists.txt)
+    builtins.match ".*project\\(Muralop VERSION ([0-9.]+).*" (builtins.readFile ../CMakeLists.txt)
   );
 
   # Only what the build reads, so README/flake/CI edits do not trigger a rebuild.
@@ -50,8 +50,8 @@ stdenv.mkDerivation {
 
   meta = {
     description = "Video desktop wallpaper for Wayland compositors with wlr-layer-shell (KDE Plasma, Sway, Hyprland, ...)";
-    homepage = "https://github.com/sdutwsl/DesktopVideo";
+    homepage = "https://github.com/sdutwsl/Muralop";
     platforms = lib.platforms.linux;
-    mainProgram = "videowallpaper";
+    mainProgram = "muralop";
   };
 }

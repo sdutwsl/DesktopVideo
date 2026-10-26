@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace vw {
+namespace muralop {
 
 // Toolkit-neutral menu description; each platform turns it into its native menu.
 struct MenuItem {
@@ -34,4 +34,4 @@ struct MenuActions {
 // The tray menu, built from the wallpaper's current state.
 std::vector<MenuItem> buildAppMenu(Wallpaper& wallpaper, const MenuActions& actions);
 
-} // namespace vw
+} // namespace muralop

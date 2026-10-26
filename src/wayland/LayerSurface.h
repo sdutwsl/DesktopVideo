@@ -13,7 +13,7 @@ struct wp_viewport;
 struct wp_fractional_scale_v1;
 struct mpv_render_context;
 
-namespace vw {
+namespace muralop {
 
 // A background layer-shell surface covering one output. mpv decodes on its own
 // threads and draws through its render API into our EGL surface on the loop thread.
@@ -58,11 +58,11 @@ private:
     bool configured_ = false;
     bool closed_ = false;
     bool dirty_ = false;   // a frame arrived while a frame callback was pending
-    unsigned framesDrawn_ = 0;   // VW_DEBUG statistics
+    unsigned framesDrawn_ = 0;   // MURALOP_DEBUG statistics
 
     MpvPlayer* player_ = nullptr;
     mpv_render_context* render_ = nullptr;
     int wakeFd_ = -1;
 };
 
-} // namespace vw
+} // namespace muralop

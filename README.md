@@ -1,6 +1,6 @@
-# DesktopVideo / VideoWallpaper
+# Muralop
 
-[![build](https://github.com/sdutwsl/DesktopVideo/actions/workflows/build.yml/badge.svg)](https://github.com/sdutwsl/DesktopVideo/actions/workflows/build.yml)
+[![build](https://github.com/sdutwsl/Muralop/actions/workflows/build.yml/badge.svg)](https://github.com/sdutwsl/Muralop/actions/workflows/build.yml)
 
 把视频当作桌面壁纸播放。一套 C++ 核心（libmpv），三个原生外壳：
 
@@ -38,10 +38,10 @@ GNOME 用户请用 [Hanabi](https://github.com/jeffshee/gnome-ext-hanabi) 之类
 
 ### 构建
 
-现成的包在 [Releases](https://github.com/sdutwsl/DesktopVideo/releases)，依赖会自动装上：
+现成的包在 [Releases](https://github.com/sdutwsl/Muralop/releases)，依赖会自动装上：
 
-- Ubuntu 26.04 / Debian 13：`sudo apt install ./videowallpaper-*-ubuntu-26.04-amd64.deb`（ARM 机器用 `-arm64.deb`）
-- Fedora 44：`sudo dnf install ./videowallpaper-*-fedora-44-x86_64.rpm`（ARM 机器用 `-aarch64.rpm`）
+- Ubuntu 26.04 / Debian 13：`sudo apt install ./muralop-*-ubuntu-26.04-amd64.deb`（ARM 机器用 `-arm64.deb`）
+- Fedora 44：`sudo dnf install ./muralop-*-fedora-44-x86_64.rpm`（ARM 机器用 `-aarch64.rpm`）
 
 依赖：`libmpv`、`wayland-client`、`wayland-egl`、`egl`、`glesv2`、`sdbus-c++` ≥ 2.0、`wayland-scanner`、CMake ≥ 3.20、C++20 编译器。
 sdbus-c++ 2 的 API 和 1.x 不兼容，所以 Ubuntu 24.04（只有 1.4）不能直接构建。
@@ -73,50 +73,50 @@ cmake -S . -B build -G Ninja && ninja -C build
 ### 使用
 
 ```sh
-videowallpaper                    # 启动守护进程（托盘里选视频）
-videowallpaper ~/Videos/a.mp4     # 启动并使用该视频
-videowallpaper set a.mp4 DP-2     # 只给 DP-2 换视频
-videowallpaper pause | resume | mute | unmute | volume 40 | monitors | quit
-VW_DEBUG=1 videowallpaper         # 打印渲染和 mpv 的详细日志
+muralop                    # 启动守护进程（托盘里选视频）
+muralop ~/Videos/a.mp4     # 启动并使用该视频
+muralop set a.mp4 DP-2     # 只给 DP-2 换视频
+muralop pause | resume | mute | unmute | volume 40 | monitors | quit
+MURALOP_DEBUG=1 muralop         # 打印渲染和 mpv 的详细日志
 ```
 
-守护进程在 session bus 上注册 `org.videowallpaper.Daemon`，也可以直接用 `busctl --user call ...` 控制；
-Sway 用户可以在 `swayidle` 的 lock/unlock 钩子里调 `videowallpaper pause/resume`。
+守护进程在 session bus 上注册 `org.muralop.Daemon`，也可以直接用 `busctl --user call ...` 控制；
+Sway 用户可以在 `swayidle` 的 lock/unlock 钩子里调 `muralop pause/resume`。
 
-开机自启：把 `data/videowallpaper.desktop` 复制到 `~/.config/autostart/`。
+开机自启：把 `data/muralop.desktop` 复制到 `~/.config/autostart/`。
 
 ### 在 NixOS / home-manager 中引用
 
 ```nix
 # flake.nix
-inputs.videowallpaper = {
-  url = "github:sdutwsl/DesktopVideo";
+inputs.muralop = {
+  url = "github:sdutwsl/Muralop";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
 
 ```nix
 # NixOS 模块：装包，并作为 systemd 用户服务随图形会话启动
-imports = [ inputs.videowallpaper.nixosModules.default ];
-programs.videowallpaper.enable = true;
-# programs.videowallpaper.autostart = false;   # 只装包，不自启
+imports = [ inputs.muralop.nixosModules.default ];
+programs.muralop.enable = true;
+# programs.muralop.autostart = false;   # 只装包，不自启
 ```
 
-home-manager 用户换成 `inputs.videowallpaper.homeModules.default`，选项相同。
-只要包本身的话：`inputs.videowallpaper.overlays.default`（提供 `pkgs.videowallpaper`）或
-`inputs.videowallpaper.packages.${system}.default`；临时试用：`nix run github:sdutwsl/DesktopVideo`。
+home-manager 用户换成 `inputs.muralop.homeModules.default`，选项相同。
+只要包本身的话：`inputs.muralop.overlays.default`（提供 `pkgs.muralop`）或
+`inputs.muralop.packages.${system}.default`；临时试用：`nix run github:sdutwsl/Muralop`。
 
 模块默认用系统自己的 `pkgs` 编译，保证和 `/run/opengl-driver` 里的显卡驱动用同一份 glibc；
 否则会在启动时报 `EGL initialisation failed`。
 
 ## Windows
 
-[Releases](https://github.com/sdutwsl/DesktopVideo/releases) 里每个版本有 x64 和 ARM64（骁龙等 Windows on ARM 设备）两套：
+[Releases](https://github.com/sdutwsl/Muralop/releases) 里每个版本有 x64 和 ARM64（骁龙等 Windows on ARM 设备）两套：
 
-- **安装包** `videowallpaper-v*-windows-<arch>-setup.exe`：装到 `%LOCALAPPDATA%\Programs\VideoWallpaper`，不需要管理员权限；有开始菜单快捷方式，可选开机自启，可在“设置 → 应用”里卸载。安装和卸载前会让正在运行的壁纸先正常退出。
-- **便携版** `videowallpaper-v*-windows-<arch>-portable.zip`：解压出 `VideoWallpaper` 文件夹直接运行。文件夹里的 `config.ini` 让设置保存在它旁边，不写 `%APPDATA%`，也不碰注册表；删掉它就改用 `%APPDATA%\VideoWallpaper\config.ini`。
+- **安装包** `muralop-v*-windows-<arch>-setup.exe`：装到 `%LOCALAPPDATA%\Programs\Muralop`，不需要管理员权限；有开始菜单快捷方式，可选开机自启，可在“设置 → 应用”里卸载。安装和卸载前会让正在运行的壁纸先正常退出。
+- **便携版** `muralop-v*-windows-<arch>-portable.zip`：解压出 `Muralop` 文件夹直接运行。文件夹里的 `config.ini` 让设置保存在它旁边，不写 `%APPDATA%`，也不碰注册表；删掉它就改用 `%APPDATA%\Muralop\config.ini`。
 
-master 每次提交的构建在 [Actions](https://github.com/sdutwsl/DesktopVideo/actions/workflows/build.yml) 的 `windows-x64` / `windows-arm64` 产物里。安装包没有代码签名，第一次运行 SmartScreen 会提示，点“更多信息 → 仍要运行”。
+master 每次提交的构建在 [Actions](https://github.com/sdutwsl/Muralop/actions/workflows/build.yml) 的 `windows-x64` / `windows-arm64` 产物里。安装包没有代码签名，第一次运行 SmartScreen 会提示，点“更多信息 → 仍要运行”。
 
 运行后右键托盘图标选择视频；把视频文件拖到 exe 上也可以。
 
@@ -129,34 +129,36 @@ master 每次提交的构建在 [Actions](https://github.com/sdutwsl/DesktopVide
    ```sh
    cmake -S . -B build-win -G Ninja -DMPV_SDK_DIR=/path/to/mpv-dev \
          -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-x86_64.cmake   # ARM64：cmake/mingw-aarch64.cmake
-   ninja -C build-win                       # videowallpaper.exe，libmpv-2.dll 会复制到旁边
-   ninja -C build-win installer portable    # videowallpaper-v<版本>-windows-<arch>-setup.exe / -portable.zip
+   ninja -C build-win                       # muralop.exe，libmpv-2.dll 会复制到旁边
+   ninja -C build-win installer portable    # muralop-v<版本>-windows-<arch>-setup.exe / -portable.zip
    ```
 
 ## macOS
 
-[Releases](https://github.com/sdutwsl/DesktopVideo/releases) 里的 `videowallpaper-v*-macos-arm64.dmg`：Apple Silicon（M 系列芯片），macOS 15 及以上。
+[Releases](https://github.com/sdutwsl/Muralop/releases) 里的 `muralop-v*-macos-arm64.dmg`：Apple Silicon（M 系列芯片），macOS 15 及以上。
 没有 Intel 版：Homebrew 已经不给 Intel Mac 出 mpv 的预编译包。
 
-打开 dmg，把 `VideoWallpaper` 拖进“应用程序”。这个包没有 Apple 开发者签名和公证，第一次打开会提示无法验证开发者：点“完成”，再到“系统设置 → 隐私与安全性”底部点“仍要打开”。
-也可以在终端里去掉下载标记：`xattr -dr com.apple.quarantine /Applications/VideoWallpaper.app`。
+打开 dmg，把 `Muralop` 拖进“应用程序”。这个包没有 Apple 开发者签名和公证，第一次打开会提示无法验证开发者：点“完成”，再到“系统设置 → 隐私与安全性”底部点“仍要打开”。
+也可以在终端里去掉下载标记：`xattr -dr com.apple.quarantine /Applications/Muralop.app`。
 
-它只在菜单栏显示一个图标（不进 Dock），点开选择视频、暂停、静音、登录时启动、退出。把视频拖到程序图标上，或在 Finder 里“打开方式 → VideoWallpaper”，也会设为壁纸。
+它只在菜单栏显示一个图标（不进 Dock），点开选择视频、暂停、静音、登录时启动、退出。把视频拖到程序图标上，或在 Finder 里“打开方式 → Muralop”，也会设为壁纸。
 锁屏、切换用户、睡眠和显示器关闭时暂停。
 
 ### 构建
 
 ```sh
 brew install cmake ninja pkgconf mpv dylibbundler
-cmake -S . -B build -G Ninja && ninja -C build   # build/VideoWallpaper.app，依赖 Homebrew 里的 libmpv
-ninja -C build dmg                                # videowallpaper-v<版本>-macos-arm64.dmg，带上 libmpv 和它依赖的全部库
+cmake -S . -B build -G Ninja && ninja -C build   # build/Muralop.app，依赖 Homebrew 里的 libmpv
+ninja -C build dmg                                # muralop-v<版本>-macos-arm64.dmg，带上 libmpv 和它依赖的全部库
 ```
 
 `ninja dmg` 用 dylibbundler 把 libmpv 及其依赖（ffmpeg、libass、libplacebo 等）复制进 `Contents/Frameworks`，检查没有残留指向 Homebrew 的路径，按这些库要求的系统版本设置 `LSMinimumSystemVersion`，再做 ad-hoc 签名。
 
 ## 配置文件
 
-Linux：`~/.config/videowallpaper/config.ini`；Windows：`%APPDATA%\VideoWallpaper\config.ini`；macOS：`~/Library/Application Support/VideoWallpaper/config.ini`。
+首次启动时，若新路径没有配置，Muralop 会读取旧版 VideoWallpaper 的配置并写入新路径；旧文件会保留。Windows 安装包会卸载旧版安装包。macOS 用户先在旧版菜单里关闭“登录时启动”，再移除 `VideoWallpaper.app`，避免两个应用同时启动。
+
+Linux：`~/.config/muralop/config.ini`；Windows：`%APPDATA%\Muralop\config.ini`；macOS：`~/Library/Application Support/Muralop/config.ini`。
 
 ```ini
 video=/path/default.mp4        # 默认视频
@@ -169,14 +171,14 @@ audio_monitor=DP-1             # 哪个显示器出声，留空用主屏
 
 ## 发布
 
-版本号只在 `CMakeLists.txt` 的 `project(VideoWallpaper VERSION x.y.z)` 里写一次，Nix 包和 Windows exe 的版本信息都从这里取。发布新版本：
+版本号只在 `CMakeLists.txt` 的 `project(Muralop VERSION x.y.z)` 里写一次，Nix 包和 Windows exe 的版本信息都从这里取。发布新版本：
 
 ```sh
 # 先改 CMakeLists.txt 里的版本号并提交
-git tag v2.2.0 && git push origin v2.2.0
+git tag v3.0.0 && git push origin v3.0.0
 ```
 
-CI 跑完全部构建后自动创建 GitHub Release，附上 Windows x64 / ARM64 的安装包和便携 zip、Ubuntu 26.04 的 amd64 / arm64 `.deb`、Fedora 44 的 x86_64 / aarch64 `.rpm`、macOS Apple Silicon 的 `.dmg`，以及 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v2.2.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
+CI 跑完全部构建后自动创建 GitHub Release，附上 Windows x64 / ARM64 的安装包和便携 zip、Ubuntu 26.04 的 amd64 / arm64 `.deb`、Fedora 44 的 x86_64 / aarch64 `.rpm`、macOS Apple Silicon 的 `.dmg`，以及 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v3.0.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
 
 ## 代码结构
 

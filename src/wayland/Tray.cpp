@@ -5,7 +5,7 @@
 #include <cmath>
 #include <cstdio>
 
-namespace vw {
+namespace muralop {
 
 static const char* SNI = "org.kde.StatusNotifierItem";
 static const char* WATCHER = "org.kde.StatusNotifierWatcher";
@@ -287,4 +287,4 @@ Tray::Layout Tray::layoutFor(int32_t id, int32_t depth, const std::vector<std::s
     return Layout(id, propsFor(*node, names), std::move(children));
 }
 
-} // namespace vw
+} // namespace muralop

@@ -14,7 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 
-namespace vw {
+namespace muralop {
 
 // ---- wl_output / xdg_output listeners ----------------------------------------
 
@@ -336,4 +336,4 @@ void WaylandDisplay::dispatch(short revents)
     }
 }
 
-} // namespace vw
+} // namespace muralop

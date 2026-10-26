@@ -3,7 +3,7 @@
 #include <map>
 #include <string>
 
-namespace vw {
+namespace muralop {
 
 // Flat key=value settings file. Keys the core uses:
 //   video                 default video for every monitor
@@ -14,7 +14,7 @@ namespace vw {
 //   audio_monitor         which monitor plays audio (empty = platform's primary)
 class Config {
 public:
-    explicit Config(std::string path);
+    explicit Config(std::string path, std::string legacyPath = {});
 
     bool load();
     bool save() const;
@@ -32,7 +32,8 @@ public:
 
 private:
     std::string path_;
+    std::string legacyPath_;
     std::map<std::string, std::string> values_;
 };
 
-} // namespace vw
+} // namespace muralop

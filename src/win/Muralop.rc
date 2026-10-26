@@ -3,12 +3,12 @@
 #include "Resource.h"
 #include "Version.h"
 
-IDI_VIDEOWALLPAPER ICON "VideoWallpaper.ico"
+IDI_MURALOP ICON "Muralop.ico"
 IDI_SMALL          ICON "small.ico"
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION    VW_VERSION_RC
- PRODUCTVERSION VW_VERSION_RC
+ FILEVERSION    MURALOP_VERSION_RC
+ PRODUCTVERSION MURALOP_VERSION_RC
  FILEOS         VOS_NT_WINDOWS32
  FILETYPE       VFT_APP
 BEGIN
@@ -16,11 +16,11 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "FileDescription", "Video Wallpaper"
-            VALUE "FileVersion",     VW_VERSION_STR
-            VALUE "ProductName",     "Video Wallpaper"
-            VALUE "ProductVersion",  VW_VERSION_STR
-            VALUE "OriginalFilename","videowallpaper.exe"
+            VALUE "FileDescription", "Muralop"
+            VALUE "FileVersion",     MURALOP_VERSION_STR
+            VALUE "ProductName",     "Muralop"
+            VALUE "ProductVersion",  MURALOP_VERSION_STR
+            VALUE "OriginalFilename","muralop.exe"
         END
     END
     BLOCK "VarFileInfo"

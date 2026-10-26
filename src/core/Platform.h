@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace vw {
+namespace muralop {
 
 class MpvPlayer;
 
@@ -35,4 +35,4 @@ public:
     virtual std::unique_ptr<Surface> createSurface(const MonitorInfo& monitor) = 0;
 };
 
-} // namespace vw
+} // namespace muralop

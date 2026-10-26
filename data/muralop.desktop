@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=Video Wallpaper
-Name[zh_CN]=视频壁纸
+Name=Muralop
+Name[zh_CN]=Muralop
 Comment=Play a video as the desktop wallpaper
 Comment[zh_CN]=把视频当作桌面壁纸播放
-Exec=videowallpaper
+Exec=muralop
 Icon=preferences-desktop-wallpaper
 Terminal=false
 Categories=Utility;

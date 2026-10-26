@@ -5,7 +5,7 @@
 #include <memory>
 #include <vector>
 
-namespace vw {
+namespace muralop {
 
 // macOS implementation of the platform layer: monitors come from NSScreen, and each
 // surface is a borderless window at the desktop window level (above the system
@@ -17,4 +17,4 @@ public:
     std::unique_ptr<Surface> createSurface(const MonitorInfo& monitor) override;
 };
 
-} // namespace vw
+} // namespace muralop

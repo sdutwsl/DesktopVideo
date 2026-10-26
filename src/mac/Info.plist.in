@@ -5,15 +5,15 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>zh_CN</string>
 	<key>CFBundleDisplayName</key>
-	<string>Video Wallpaper</string>
+	<string>Muralop</string>
 	<key>CFBundleName</key>
-	<string>Video Wallpaper</string>
+	<string>Muralop</string>
 	<key>CFBundleExecutable</key>
-	<string>VideoWallpaper</string>
+	<string>Muralop</string>
 	<key>CFBundleIdentifier</key>
-	<string>io.github.sdutwsl.videowallpaper</string>
+	<string>io.github.sdutwsl.muralop</string>
 	<key>CFBundleIconFile</key>
-	<string>VideoWallpaper</string>
+	<string>Muralop</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundlePackageType</key>

@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace vw {
+namespace muralop {
 
 // System tray icon via the StatusNotifierItem protocol, with its menu exported
 // through com.canonical.dbusmenu. Works on KDE, Sway/Waybar, Hyprland bars and
@@ -57,4 +57,4 @@ private:
     bool registered_ = false;
 };
 
-} // namespace vw
+} // namespace muralop

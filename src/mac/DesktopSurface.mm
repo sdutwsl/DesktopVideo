@@ -19,16 +19,16 @@
 // asynchronous: the surface calls setNeedsDisplay when mpv has a new frame, and the
 // drawing then happens on the main thread, in the same OpenGL context the render
 // context was created in.
-@interface VWVideoLayer : CAOpenGLLayer
+@interface MuralopVideoLayer : CAOpenGLLayer
 - (instancetype)initWithContext:(CGLContextObj)context pixelFormat:(CGLPixelFormatObj)pixelFormat label:(const std::string&)label;
 @property (nonatomic) mpv_render_context* render;   // owned by the surface
 @end
 
-@implementation VWVideoLayer {
+@implementation MuralopVideoLayer {
     CGLContextObj _context;
     CGLPixelFormatObj _pixelFormat;
     std::string _label;
-    unsigned _framesDrawn;   // VW_DEBUG statistics
+    unsigned _framesDrawn;   // MURALOP_DEBUG statistics
 }
 
 - (instancetype)initWithContext:(CGLContextObj)context pixelFormat:(CGLPixelFormatObj)pixelFormat label:(const std::string&)label
@@ -80,7 +80,7 @@
             {MPV_RENDER_PARAM_INVALID, nullptr},
         };
         mpv_render_context_render(_render, params);
-        if (getenv("VW_DEBUG") && (++_framesDrawn == 1 || _framesDrawn % 600 == 0))
+        if (getenv("MURALOP_DEBUG") && (++_framesDrawn == 1 || _framesDrawn % 600 == 0))
             fprintf(stderr, "[%s] frames drawn: %u (%dx%d)\n", _label.c_str(), _framesDrawn, viewport[2], viewport[3]);
     } else {
         glClearColor(0.f, 0.f, 0.f, 1.f);
@@ -91,7 +91,7 @@
 
 @end
 
-namespace vw {
+namespace muralop {
 namespace {
 
 std::string utf8(NSString* text)
@@ -182,7 +182,7 @@ public:
 private:
     MonitorInfo monitor_;
     NSWindow* window_ = nil;
-    VWVideoLayer* layer_ = nil;
+    MuralopVideoLayer* layer_ = nil;
     id backingObserver_ = nil;
     CGLContextObj context_ = nullptr;
     std::shared_ptr<Waker> waker_ = std::make_shared<Waker>();
@@ -232,7 +232,7 @@ DesktopSurface::DesktopSurface(NSScreen* screen, const MonitorInfo& monitor) : m
 
     NSView* view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, frame.size.width, frame.size.height)];
     if (context_) {
-        layer_ = [[VWVideoLayer alloc] initWithContext:context_ pixelFormat:pixelFormat label:monitor_.id];
+        layer_ = [[MuralopVideoLayer alloc] initWithContext:context_ pixelFormat:pixelFormat label:monitor_.id];
         layer_.contentsScale = screen.backingScaleFactor;   // draw at the panel's pixel size
         view.layer = layer_;   // a layer-hosting view: the layer is set before wantsLayer
         view.wantsLayer = YES;
@@ -245,7 +245,7 @@ DesktopSurface::DesktopSurface(NSScreen* screen, const MonitorInfo& monitor) : m
 
     // The display switched between Retina and non-Retina modes without changing size.
     if (layer_) {
-        VWVideoLayer* layer = layer_;
+        MuralopVideoLayer* layer = layer_;
         NSWindow* __weak window = window_;
         backingObserver_ = [NSNotificationCenter.defaultCenter
             addObserverForName:NSWindowDidChangeBackingPropertiesNotification
@@ -281,7 +281,7 @@ void DesktopSurface::attach(MpvPlayer& player)
 
     // The render context has to exist before a file is loaded, or mpv disables video.
     CGLSetCurrentContext(context_);
-    if (getenv("VW_DEBUG"))
+    if (getenv("MURALOP_DEBUG"))
         fprintf(stderr, "[%s] OpenGL renderer: %s\n", monitor_.id.c_str(),
                 reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
     mpv_opengl_init_params gl{};
@@ -340,4 +340,4 @@ std::unique_ptr<Surface> MacPlatform::createSurface(const MonitorInfo& monitor)
     return nullptr;
 }
 
-} // namespace vw
+} // namespace muralop

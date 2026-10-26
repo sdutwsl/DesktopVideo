@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-namespace vw {
+namespace muralop {
 
 EventLoop::EventLoop()
 {
@@ -88,4 +88,4 @@ void EventLoop::run()
     }
 }
 
-} // namespace vw
+} // namespace muralop

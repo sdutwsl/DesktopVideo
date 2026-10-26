@@ -4,7 +4,7 @@ name: build
 # matches project() in CMakeLists.txt, additionally publishes a GitHub release with the
 # Windows installers and portable zips (x64, ARM64), the Ubuntu .deb and Fedora .rpm
 # (x86_64, aarch64) and the macOS .dmg (Apple Silicon). Each build job names its files
-# videowallpaper-v<VERSION>-..., so the release job only has to collect them.
+# muralop-v<VERSION>-..., so the release job only has to collect them.
 on:
   push:
     branches: [master]
@@ -67,11 +67,11 @@ jobs:
           cpack -G DEB
           deb=$(ls ./*.deb)
           dpkg-deb --info "$deb"
-          mv "$deb" "videowallpaper-v$(dpkg-deb -f "$deb" Version)-ubuntu-26.04-$(dpkg-deb -f "$deb" Architecture).deb"
+          mv "$deb" "muralop-v$(dpkg-deb -f "$deb" Version)-ubuntu-26.04-$(dpkg-deb -f "$deb" Architecture).deb"
       - uses: actions/upload-artifact@v4
         with:
           name: ubuntu-26.04-${{ matrix.arch }}
-          path: build/videowallpaper-v*.deb
+          path: build/muralop-v*.deb
 
   fedora:
     name: Linux ${{ matrix.arch }} (Fedora 44 .rpm)
@@ -101,11 +101,11 @@ jobs:
           rpm=$(ls ./*.rpm)
           rpm -qip "$rpm"
           rpm -qpR "$rpm"
-          mv "$rpm" "$(rpm -qp --qf 'videowallpaper-v%{VERSION}-fedora-44-%{ARCH}.rpm' "$rpm")"
+          mv "$rpm" "$(rpm -qp --qf 'muralop-v%{VERSION}-fedora-44-%{ARCH}.rpm' "$rpm")"
       - uses: actions/upload-artifact@v4
         with:
           name: fedora-44-${{ matrix.arch }}
-          path: build/videowallpaper-v*.rpm
+          path: build/muralop-v*.rpm
 
   windows:
     name: Windows ${{ matrix.arch }} (MinGW cross from Nix)
@@ -146,13 +146,13 @@ jobs:
       - name: Package installer and portable zip
         run: |
           nix develop ".#$SHELL_NAME" -c ninja -C build-win installer portable
-          ls -l build-win/videowallpaper-v*
+          ls -l build-win/muralop-v*
       - uses: actions/upload-artifact@v4
         with:
           name: windows-${{ matrix.arch }}
           path: |
-            build-win/videowallpaper-v*-setup.exe
-            build-win/videowallpaper-v*-portable.zip
+            build-win/muralop-v*-setup.exe
+            build-win/muralop-v*-portable.zip
 
   macos:
     name: macOS arm64 (.dmg)
@@ -170,22 +170,22 @@ jobs:
       - name: Package .dmg
         run: |
           ninja -C build dmg
-          ls -l build/videowallpaper-v*.dmg
+          ls -l build/muralop-v*.dmg
       - name: Smoke test the packaged app
         run: |
           mnt=$(mktemp -d)
-          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" build/videowallpaper-v*.dmg
-          cp -R "$mnt/VideoWallpaper.app" "$RUNNER_TEMP/"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" build/muralop-v*.dmg
+          cp -R "$mnt/Muralop.app" "$RUNNER_TEMP/"
           hdiutil detach "$mnt"
-          app="$RUNNER_TEMP/VideoWallpaper.app"
+          app="$RUNNER_TEMP/Muralop.app"
           plutil -p "$app/Contents/Info.plist"
           ffmpeg -v error -f lavfi -i testsrc2=size=1920x1080:rate=30 -t 10 -pix_fmt yuv420p "$RUNNER_TEMP/test.mp4"
-          conf="$HOME/Library/Application Support/VideoWallpaper"
+          conf="$HOME/Library/Application Support/Muralop"
           mkdir -p "$conf"
           printf 'video=%s\n' "$RUNNER_TEMP/test.mp4" > "$conf/config.ini"
           # Still running after 10 s and has drawn video: the bundled libraries load and
           # the desktop window renders (with Apple's software renderer on these VMs).
-          VW_DEBUG=1 "$app/Contents/MacOS/VideoWallpaper" > "$RUNNER_TEMP/smoke.log" 2>&1 &
+          MURALOP_DEBUG=1 "$app/Contents/MacOS/Muralop" > "$RUNNER_TEMP/smoke.log" 2>&1 &
           pid=$!
           sleep 10
           alive=yes
@@ -196,7 +196,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: macos-arm64
-          path: build/videowallpaper-v*.dmg
+          path: build/muralop-v*.dmg
 
   release:
     name: Publish release
@@ -209,8 +209,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check tag against project version
         run: |
-          # v2.1.0 and v2.1.0-rc1 both need VERSION 2.1.0.
-          version=$(sed -n 's/^project(VideoWallpaper VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          # v3.0.0 and v3.0.0-rc1 both need VERSION 3.0.0.
+          version=$(sed -n 's/^project(Muralop VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
           if [ "v${version}" != "${GITHUB_REF_NAME%%-*}" ]; then
             echo "::error::tag $GITHUB_REF_NAME does not match CMakeLists.txt version ${version}; bump project(VERSION) first"
             exit 1
@@ -233,4 +233,4 @@ jobs:
           case "$GITHUB_REF_NAME" in *-*) prerelease=(--prerelease) ;; esac
           gh release create "$GITHUB_REF_NAME" assets/* \
             --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes \
-            --title "VideoWallpaper ${GITHUB_REF_NAME}" "${prerelease[@]}"
+            --title "Muralop ${GITHUB_REF_NAME}" "${prerelease[@]}"

@@ -4,7 +4,7 @@
 
 #include <sdbus-c++/sdbus-c++.h>
 
-namespace vw {
+namespace muralop {
 
 // Drives an sdbus-c++ connection from our poll loop instead of its own thread.
 // sdbus-c++ 2 wants two fds watched: the bus socket and an eventfd it uses to
@@ -48,4 +48,4 @@ private:
     WakeSource wake_;
 };
 
-} // namespace vw
+} // namespace muralop

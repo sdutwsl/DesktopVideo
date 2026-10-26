@@ -4,7 +4,7 @@
 #include <mutex>
 #include <vector>
 
-namespace vw {
+namespace muralop {
 
 // Minimal poll(2) loop. Sources contribute an fd and get told whether it became
 // readable after each round, so a source can also use the round for bookkeeping
@@ -43,4 +43,4 @@ private:
     bool running_ = false;
 };
 
-} // namespace vw
+} // namespace muralop

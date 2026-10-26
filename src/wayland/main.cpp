@@ -1,4 +1,4 @@
-// VideoWallpaper for Wayland: layer-shell background surfaces drawn by libmpv,
+// Muralop for Wayland: layer-shell background surfaces drawn by libmpv,
 // a StatusNotifierItem tray icon and a small D-Bus control interface.
 
 #include "DBus.h"
@@ -21,13 +21,13 @@
 #include <string>
 #include <vector>
 
-using namespace vw;
+using namespace muralop;
 
 namespace {
 
 void usage()
 {
-    fputs("usage: videowallpaper [--config FILE] [COMMAND]\n"
+    fputs("usage: muralop [--config FILE] [COMMAND]\n"
           "\n"
           "  (no command)          start the wallpaper daemon\n"
           "  FILE                  use FILE as the wallpaper video (starts the daemon if needed)\n"
@@ -41,12 +41,11 @@ void usage()
           stderr);
 }
 
-std::string defaultConfigPath()
+std::filesystem::path configBase()
 {
     const char* xdg = getenv("XDG_CONFIG_HOME");
-    std::filesystem::path base = (xdg && *xdg) ? std::filesystem::path(xdg)
-                                                : std::filesystem::path(getenv("HOME") ? getenv("HOME") : ".") / ".config";
-    return (base / "videowallpaper" / "config.ini").string();
+    return (xdg && *xdg) ? std::filesystem::path(xdg)
+                         : std::filesystem::path(getenv("HOME") ? getenv("HOME") : ".") / ".config";
 }
 
 // Send a command to the running daemon.
@@ -59,7 +58,7 @@ int forward(sdbus::IConnection& bus, const std::vector<std::string>& args)
     const std::string& cmd = args.empty() ? "" : args[0];
     try {
         if (cmd.empty()) {
-            fputs("videowallpaper is already running\n", stderr);
+            fputs("muralop is already running\n", stderr);
             return 1;
         } else if (cmd == "set" && args.size() >= 2) {
             call("SetVideo", std::filesystem::absolute(args[1]).string(), args.size() > 2 ? args[2] : "");
@@ -85,7 +84,7 @@ int forward(sdbus::IConnection& bus, const std::vector<std::string>& args)
             return 2;
         }
     } catch (const sdbus::Error& e) {
-        fprintf(stderr, "videowallpaper: %s\n", e.getMessage().c_str());
+        fprintf(stderr, "muralop: %s\n", e.getMessage().c_str());
         return 1;
     }
     return 0;
@@ -137,11 +136,14 @@ void wrapActivations(std::vector<MenuItem>& items, const std::function<void()>& 
 
 int main(int argc, char** argv)
 {
-    std::string configPath = defaultConfigPath();
+    std::string configPath = (configBase() / "muralop" / "config.ini").string();
+    std::string legacyConfigPath = (configBase() / "videowallpaper" / "config.ini").string();
     std::vector<std::string> args;
     for (int i = 1; i < argc; ++i) {
-        if (!strcmp(argv[i], "--config") && i + 1 < argc)
+        if (!strcmp(argv[i], "--config") && i + 1 < argc) {
             configPath = argv[++i];
+            legacyConfigPath.clear();
+        }
         else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
             usage();
             return 0;
@@ -155,7 +157,7 @@ int main(int argc, char** argv)
         session->requestName(sdbus::ServiceName(Control::SERVICE));
     } catch (const sdbus::Error& e) {
         if (!session) {
-            fprintf(stderr, "videowallpaper: cannot connect to the session bus: %s\n", e.getMessage().c_str());
+            fprintf(stderr, "muralop: cannot connect to the session bus: %s\n", e.getMessage().c_str());
             return 1;
         }
         return forward(*session, args);   // someone already owns the name: we are the client
@@ -170,12 +172,12 @@ int main(int argc, char** argv)
         else if (std::filesystem::is_regular_file(cmd))
             initialVideo = std::filesystem::absolute(cmd).string();
         else {
-            fputs("videowallpaper: daemon is not running\n", stderr);
+            fputs("muralop: daemon is not running\n", stderr);
             return 1;
         }
     }
 
-    Config config(configPath);
+    Config config(configPath, legacyConfigPath);
     config.load();
     if (!initialVideo.empty()) {
         config.set("video", initialVideo);
@@ -197,12 +199,12 @@ int main(int argc, char** argv)
     WaylandDisplay display(loop);
     std::string error;
     if (!display.connect(error)) {
-        fprintf(stderr, "videowallpaper: %s\n", error.c_str());
+        fprintf(stderr, "muralop: %s\n", error.c_str());
         return 1;
     }
 
     Wallpaper wallpaper(display, config);
-    Tray tray(*session, "videowallpaper", "Video Wallpaper");
+    Tray tray(*session, "muralop", "Muralop");
     FileChooser chooser(*session);
 
     MenuActions actions;
@@ -230,7 +232,7 @@ int main(int argc, char** argv)
         rebuildMenu();
     };
     display.onDisconnected = [&] {
-        fputs("videowallpaper: compositor went away\n", stderr);
+        fputs("muralop: compositor went away\n", stderr);
         loop.quit();
     };
 
@@ -260,7 +262,7 @@ int main(int argc, char** argv)
     wallpaper.refreshMonitors();
     rebuildMenu();
     if (wallpaper.videoFor("").empty())
-        fputs("[wallpaper] no video configured yet; pick one from the tray menu or run: videowallpaper set FILE\n", stderr);
+        fputs("[wallpaper] no video configured yet; pick one from the tray menu or run: muralop set FILE\n", stderr);
 
     loop.run();
 

@@ -1,4 +1,4 @@
-// VideoWallpaper for Windows: libmpv renders into child windows of Explorer's
+// Muralop for Windows: libmpv renders into child windows of Explorer's
 // WorkerW (below the desktop icons); a Shell_NotifyIcon tray menu controls it.
 
 #include "DesktopSurface.h"
@@ -18,11 +18,11 @@
 #include <string>
 #include <vector>
 
-using namespace vw;
+using namespace muralop;
 
 namespace {
 
-const wchar_t* MAIN_CLASS = L"VideoWallpaperMain";
+const wchar_t* MAIN_CLASS = L"MuralopMain";
 const UINT WMAPP_TRAY = WM_APP + 1;
 const UINT TRAY_ID = 1;
 const UINT_PTR TIMER_REBUILD = 1;
@@ -39,8 +39,10 @@ struct App {
 App app;
 
 // Portable mode: a config.ini next to the exe (the portable zip ships one) keeps the
-// settings in that folder; otherwise they live in %APPDATA%\VideoWallpaper.
-std::string configPath()
+// settings in that folder; otherwise they live in %APPDATA%\Muralop.
+struct ConfigPaths { std::string current, legacy; };
+
+ConfigPaths configPaths()
 {
     wchar_t exe[MAX_PATH] = {0};
     const DWORD len = GetModuleFileNameW(nullptr, exe, MAX_PATH);
@@ -49,13 +51,14 @@ std::string configPath()
         local.resize(local.find_last_of(L'\\') + 1);
         local += L"config.ini";
         if (GetFileAttributesW(local.c_str()) != INVALID_FILE_ATTRIBUTES)
-            return toUtf8(local.c_str());
+            return {toUtf8(local.c_str()), ""};
     }
 
     wchar_t dir[MAX_PATH] = {0};
     if (FAILED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, dir)))
-        return "config.ini";
-    return toUtf8(dir) + "\\VideoWallpaper\\config.ini";
+        return {"config.ini", ""};
+    const std::string base = toUtf8(dir);
+    return {base + "\\Muralop\\config.ini", base + "\\VideoWallpaper\\config.ini"};
 }
 
 void enablePerMonitorDpi()
@@ -77,8 +80,8 @@ void trayIcon(bool add)
     nid.uID = TRAY_ID;
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WMAPP_TRAY;
-    nid.hIcon = LoadIconW(app.instance, MAKEINTRESOURCEW(IDI_VIDEOWALLPAPER));
-    lstrcpynW(nid.szTip, L"Video Wallpaper", ARRAYSIZE(nid.szTip));
+    nid.hIcon = LoadIconW(app.instance, MAKEINTRESOURCEW(IDI_MURALOP));
+    lstrcpynW(nid.szTip, L"Muralop", ARRAYSIZE(nid.szTip));
     Shell_NotifyIconW(add ? NIM_ADD : NIM_DELETE, &nid);
     if (add) {
         nid.uVersion = NOTIFYICON_VERSION_4;
@@ -210,15 +213,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR cmdLine, int)
 {
-    HANDLE mutex = CreateMutexW(nullptr, TRUE, L"VideoWallpaper.SingleInstance");
+    HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Muralop.SingleInstance");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        MessageBoxW(nullptr, L"Video Wallpaper 已经在运行，看看托盘图标。", L"Video Wallpaper", MB_OK | MB_ICONINFORMATION);
+        MessageBoxW(nullptr, L"Muralop 已经在运行，看看托盘图标。", L"Muralop", MB_OK | MB_ICONINFORMATION);
         return 0;
     }
     enablePerMonitorDpi();
 
     app.instance = instance;
-    app.config = std::make_unique<Config>(configPath());
+    const ConfigPaths paths = configPaths();
+    app.config = std::make_unique<Config>(paths.current, paths.legacy);
     app.config->load();
 
     // A video passed on the command line (drag & drop onto the exe) becomes the default.
@@ -245,12 +249,12 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR cmdLine, int)
     wc.lpfnWndProc = WndProc;
     wc.hInstance = instance;
     wc.lpszClassName = MAIN_CLASS;
-    wc.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(IDI_VIDEOWALLPAPER));
+    wc.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(IDI_MURALOP));
     RegisterClassW(&wc);
     app.taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     // A hidden top-level window (not HWND_MESSAGE) so broadcasts such as
     // WM_DISPLAYCHANGE, WM_POWERBROADCAST, WM_ENDSESSION and TaskbarCreated reach us.
-    app.hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, MAIN_CLASS, L"Video Wallpaper", WS_OVERLAPPED, 0, 0, 0, 0, nullptr, nullptr, instance, nullptr);
+    app.hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, MAIN_CLASS, L"Muralop", WS_OVERLAPPED, 0, 0, 0, 0, nullptr, nullptr, instance, nullptr);
     if (!app.hwnd)
         return 1;
 

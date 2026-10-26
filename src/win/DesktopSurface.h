@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace vw {
+namespace muralop {
 
 // Windows implementation of the platform layer: monitors come from
 // EnumDisplayMonitors, surfaces are child windows of the WorkerW that Explorer
@@ -33,4 +33,4 @@ private:
 std::string toUtf8(const wchar_t* text);
 std::wstring toWide(const std::string& text);
 
-} // namespace vw
+} // namespace muralop

@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-namespace vw {
+namespace muralop {
 
 MpvPlayer::MpvPlayer()
 {
@@ -29,7 +29,7 @@ MpvPlayer::MpvPlayer()
     setOption("stop-screensaver", "no");
     setOption("audio-display", "no");
     setOption("terminal", "no");
-    mpv_request_log_messages(mpv_, getenv("VW_DEBUG") ? "info" : "error");
+    mpv_request_log_messages(mpv_, getenv("MURALOP_DEBUG") ? "info" : "error");
     // Registered once; setWakeup() only swaps the target, so we never call into mpv
     // while holding wakeupMutex_ (mpv holds its own lock while invoking the callback).
     mpv_set_wakeup_callback(mpv_, &MpvPlayer::wakeupCb, this);
@@ -139,4 +139,4 @@ void MpvPlayer::setMute(bool mute)
         mpv_set_property_string(mpv_, "mute", mute ? "yes" : "no");
 }
 
-} // namespace vw
+} // namespace muralop

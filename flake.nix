@@ -1,5 +1,5 @@
 {
-  description = "VideoWallpaper - video desktop wallpaper for Windows and Wayland";
+  description = "Muralop - video desktop wallpaper for Linux Wayland, Windows and macOS";
 
   # Resolved through the flake registry (system nixpkgs on NixOS); override with
   #   nix develop --override-input nixpkgs github:NixOS/nixpkgs/nixos-unstable
@@ -25,15 +25,15 @@
     in
     {
       packages = forAll (pkgs: rec {
-        videowallpaper = pkgs.callPackage ./nix/package.nix { };
-        default = videowallpaper;
+        muralop = pkgs.callPackage ./nix/package.nix { };
+        default = muralop;
       });
 
       overlays.default = final: _prev: {
-        videowallpaper = final.callPackage ./nix/package.nix { };
+        muralop = final.callPackage ./nix/package.nix { };
       };
 
-      # programs.videowallpaper.{enable,package,autostart}
+      # programs.muralop.{enable,package,autostart}
       nixosModules.default = import ./nix/nixos-module.nix;
       homeModules.default = import ./nix/home-module.nix;
       homeManagerModules.default = self.homeModules.default;

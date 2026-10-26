@@ -1,4 +1,4 @@
-// VideoWallpaper for macOS: libmpv draws into borderless windows at the desktop level
+// Muralop for macOS: libmpv draws into borderless windows at the desktop level
 // (below the Finder's icons); a menu bar item controls it.
 
 #include "DesktopSurface.h"
@@ -18,7 +18,7 @@
 #include <string>
 #include <vector>
 
-using namespace vw;
+using namespace muralop;
 
 namespace {
 
@@ -36,7 +36,17 @@ std::string configPath()
                                                          error:nil];
     if (!dir)
         return "config.ini";
-    return [dir URLByAppendingPathComponent:@"VideoWallpaper/config.ini"].fileSystemRepresentation;
+    return [dir URLByAppendingPathComponent:@"Muralop/config.ini"].fileSystemRepresentation;
+}
+
+std::string legacyConfigPath()
+{
+    NSURL* dir = [NSFileManager.defaultManager URLForDirectory:NSApplicationSupportDirectory
+                                                      inDomain:NSUserDomainMask
+                                             appropriateForURL:nil
+                                                        create:NO
+                                                         error:nil];
+    return dir ? [dir URLByAppendingPathComponent:@"VideoWallpaper/config.ini"].fileSystemRepresentation : "";
 }
 
 NSArray<UTType*>* videoTypes()
@@ -52,12 +62,12 @@ NSArray<UTType*>* videoTypes()
 } // namespace
 
 // Target of one menu item; the item keeps it alive through representedObject.
-@interface VWAction : NSObject
+@interface MuralopAction : NSObject
 - (instancetype)initWithHandler:(std::function<void()>)handler;
 - (void)run:(id)sender;
 @end
 
-@implementation VWAction {
+@implementation MuralopAction {
     std::function<void()> _handler;
 }
 
@@ -79,10 +89,10 @@ NSArray<UTType*>* videoTypes()
 
 @end
 
-@interface VWAppDelegate : NSObject <NSApplicationDelegate, NSMenuDelegate>
+@interface MuralopAppDelegate : NSObject <NSApplicationDelegate, NSMenuDelegate>
 @end
 
-@implementation VWAppDelegate {
+@implementation MuralopAppDelegate {
     std::unique_ptr<Config> _config;
     std::unique_ptr<MacPlatform> _platform;
     std::unique_ptr<Wallpaper> _wallpaper;
@@ -97,7 +107,7 @@ NSArray<UTType*>* videoTypes()
 {
     // Before application:openURLs:, which arrives first when the app is started by
     // opening a video with it.
-    _config = std::make_unique<Config>(configPath());
+    _config = std::make_unique<Config>(configPath(), legacyConfigPath());
     _config->load();
 }
 
@@ -106,12 +116,12 @@ NSArray<UTType*>* videoTypes()
     _platform = std::make_unique<MacPlatform>();
     _wallpaper = std::make_unique<Wallpaper>(*_platform, *_config);
 
-    VWAppDelegate* me = self;
+    MuralopAppDelegate* me = self;
     _actions.quit = [] { [NSApp terminate:nil]; };
     _actions.chooseVideo = [me](const std::string& monitor) { [me chooseVideo:monitor]; };
 
     _statusItem = [NSStatusBar.systemStatusBar statusItemWithLength:NSVariableStatusItemLength];
-    _statusItem.button.toolTip = @"Video Wallpaper";
+    _statusItem.button.toolTip = @"Muralop";
     NSMenu* menu = [[NSMenu alloc] init];
     menu.autoenablesItems = NO;
     menu.delegate = self;   // rebuilt from the wallpaper's state each time it opens
@@ -167,7 +177,7 @@ NSArray<UTType*>* videoTypes()
 {
     const bool paused = _wallpaper && _wallpaper->userPaused();
     _statusItem.button.image = [NSImage imageWithSystemSymbolName:paused ? @"pause.rectangle" : @"play.rectangle"
-                                         accessibilityDescription:@"Video Wallpaper"];
+                                         accessibilityDescription:@"Muralop"];
 }
 
 - (void)menuNeedsUpdate:(NSMenu*)menu
@@ -179,7 +189,7 @@ NSArray<UTType*>* videoTypes()
         login.label = "登录时启动";
         login.checkable = true;
         login.checked = SMAppService.mainAppService.status == SMAppServiceStatusEnabled;
-        VWAppDelegate* me = self;
+        MuralopAppDelegate* me = self;
         login.activate = [me] { [me toggleLoginItem]; };
         items.insert(items.end() - 1, login);
     }
@@ -204,9 +214,9 @@ NSArray<UTType*>* videoTypes()
             [self fill:submenu with:item.children];
             entry.submenu = submenu;
         } else if (item.activate) {
-            VWAppDelegate* me = self;
+            MuralopAppDelegate* me = self;
             std::function<void()> activate = item.activate;
-            VWAction* action = [[VWAction alloc] initWithHandler:[me, activate] {
+            MuralopAction* action = [[MuralopAction alloc] initWithHandler:[me, activate] {
                 activate();
                 [me updateStatusIcon];
             }];
@@ -269,7 +279,7 @@ NSArray<UTType*>* videoTypes()
 
 - (void)observeSystem
 {
-    VWAppDelegate* me = self;
+    MuralopAppDelegate* me = self;
     auto on = [](NSNotificationCenter* center, NSNotificationName name, void (^handler)(void)) {
         [center addObserverForName:name object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification*) {
             handler();
@@ -315,14 +325,14 @@ int main()
         if (NSString* bundleId = NSBundle.mainBundle.bundleIdentifier) {
             for (NSRunningApplication* other in [NSRunningApplication runningApplicationsWithBundleIdentifier:bundleId]) {
                 if (other.processIdentifier != getpid()) {
-                    fputs("Video Wallpaper is already running; look for it in the menu bar\n", stderr);
+                    fputs("Muralop is already running; look for it in the menu bar\n", stderr);
                     return 0;
                 }
             }
         }
         NSApplication* app = NSApplication.sharedApplication;
         [app setActivationPolicy:NSApplicationActivationPolicyAccessory];   // also without the bundle's LSUIElement
-        VWAppDelegate* delegate = [[VWAppDelegate alloc] init];
+        MuralopAppDelegate* delegate = [[MuralopAppDelegate alloc] init];
         app.delegate = delegate;
         [app run];
     }

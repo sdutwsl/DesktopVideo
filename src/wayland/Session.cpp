@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <map>
 
-namespace vw {
+namespace muralop {
 
 // ---- SessionMonitor ---------------------------------------------------------------
 
@@ -72,7 +72,7 @@ void FileChooser::open(const std::string& title, std::function<void(std::string)
 {
     // The portal answers with a Response signal on a request path derived from our
     // unique name and the token we pass, so we can subscribe before asking.
-    const std::string token = "vw" + std::to_string(++counter_);
+    const std::string token = "muralop" + std::to_string(++counter_);
     std::string sender = bus_.getUniqueName().substr(1);   // drop the leading ':'
     for (char& c : sender)
         if (c == '.')
@@ -121,9 +121,9 @@ void FileChooser::open(const std::string& title, std::function<void(std::string)
 
 // ---- Control ----------------------------------------------------------------------
 
-const char* Control::SERVICE = "org.videowallpaper.Daemon";
-const char* Control::PATH = "/org/videowallpaper/Daemon";
-const char* Control::INTERFACE = "org.videowallpaper.Daemon";
+const char* Control::SERVICE = "org.muralop.Daemon";
+const char* Control::PATH = "/org/muralop/Daemon";
+const char* Control::INTERFACE = "org.muralop.Daemon";
 
 Control::Control(sdbus::IConnection& bus, Handlers handlers) : handlers_(std::move(handlers))
 {
@@ -140,4 +140,4 @@ Control::Control(sdbus::IConnection& bus, Handlers handlers) : handlers_(std::mo
         .forInterface(INTERFACE);
 }
 
-} // namespace vw
+} // namespace muralop

@@ -3,9 +3,9 @@
 
 #include <cstdio>
 
-namespace vw {
+namespace muralop {
 
-static const wchar_t* SURFACE_CLASS = L"VideoWallpaperSurface";
+static const wchar_t* SURFACE_CLASS = L"MuralopSurface";
 static const UINT WMAPP_MPV_EVENTS = WM_APP + 1;   // posted by mpv's wakeup callback
 
 std::string toUtf8(const wchar_t* text)
@@ -175,4 +175,4 @@ std::unique_ptr<Surface> WinPlatform::createSurface(const MonitorInfo& monitor)
     return std::make_unique<WinSurface>(hwnd, monitor);
 }
 
-} // namespace vw
+} // namespace muralop

@@ -1,8 +1,8 @@
-; Video Wallpaper installer (NSIS 3). Built by `ninja installer` in a Windows build tree,
+; Muralop installer (NSIS 3). Built by `ninja installer` in a Windows build tree,
 ; which defines VERSION, ARCH (x64 | arm64), EXE, MPV_DLL and OUTFILE.
 ;
-; Installs for the current user into %LOCALAPPDATA%\Programs\VideoWallpaper, so there is
-; no UAC prompt. The settings in %APPDATA%\VideoWallpaper survive an uninstall.
+; Installs for the current user into %LOCALAPPDATA%\Programs\Muralop, so there is
+; no UAC prompt. The settings in %APPDATA%\Muralop survive an uninstall.
 
 Unicode true
 ManifestDPIAware true
@@ -13,21 +13,22 @@ SetCompressor /SOLID lzma
 !include "x64.nsh"
 !include "FileFunc.nsh"
 
-!define APP_NAME "Video Wallpaper"
-!define APP_EXE "videowallpaper.exe"
-!define MAIN_CLASS "VideoWallpaperMain"   ; the hidden main window, see src/win/main.cpp
-!define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\VideoWallpaper"
+!define APP_NAME "Muralop"
+!define APP_EXE "muralop.exe"
+!define MAIN_CLASS "MuralopMain"   ; the hidden main window, see src/win/main.cpp
+!define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\Muralop"
+!define LEGACY_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\VideoWallpaper"
 !define RUN_KEY "Software\Microsoft\Windows\CurrentVersion\Run"
 !define SHORTCUT "$SMPROGRAMS\${APP_NAME}.lnk"
 
 Name "${APP_NAME}"
 OutFile "${OUTFILE}"
 RequestExecutionLevel user
-InstallDir "$LOCALAPPDATA\Programs\VideoWallpaper"
+InstallDir "$LOCALAPPDATA\Programs\Muralop"
 InstallDirRegKey HKCU "${UNINST_KEY}" "InstallLocation"
 
-!define MUI_ICON "${__FILEDIR__}/VideoWallpaper.ico"
-!define MUI_UNICON "${__FILEDIR__}/VideoWallpaper.ico"
+!define MUI_ICON "${__FILEDIR__}/Muralop.ico"
+!define MUI_UNICON "${__FILEDIR__}/Muralop.ico"
 !define MUI_ABORTWARNING
 !define MUI_COMPONENTSPAGE_NODESC
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXE}"
@@ -43,14 +44,14 @@ InstallDirRegKey HKCU "${UNINST_KEY}" "InstallLocation"
 !insertmacro MUI_LANGUAGE "English"
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
-LangString SecApp ${LANG_ENGLISH} "Video Wallpaper"
-LangString SecApp ${LANG_SIMPCHINESE} "视频壁纸"
+LangString SecApp ${LANG_ENGLISH} "Muralop"
+LangString SecApp ${LANG_SIMPCHINESE} "Muralop"
 LangString SecAutostart ${LANG_ENGLISH} "Start with Windows"
 LangString SecAutostart ${LANG_SIMPCHINESE} "开机自动启动"
 LangString MsgWrongArch ${LANG_ENGLISH} "This installer is for ${ARCH} Windows. Please download the one that matches this PC."
 LangString MsgWrongArch ${LANG_SIMPCHINESE} "这个安装包是给 ${ARCH} 版 Windows 的，请下载和这台电脑匹配的版本。"
-LangString MsgStillRunning ${LANG_ENGLISH} "Video Wallpaper is still running. Quit it from its tray icon, then click Retry."
-LangString MsgStillRunning ${LANG_SIMPCHINESE} "视频壁纸还在运行。请先从托盘图标退出，再点“重试”。"
+LangString MsgStillRunning ${LANG_ENGLISH} "Muralop is still running. Quit it from its tray icon, then click Retry."
+LangString MsgStillRunning ${LANG_SIMPCHINESE} "Muralop 还在运行。请先从托盘图标退出，再点“重试”。"
 
 VIProductVersion "${VERSION}.0"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductName" "${APP_NAME}"
@@ -110,19 +111,28 @@ FunctionEnd
 
 Section "!$(SecApp)" SecApp
     SectionIn RO
+    ; Upgrade the previous app name in place; its uninstaller preserves the old config.
+    ReadRegStr $2 HKCU "${LEGACY_UNINST_KEY}" "InstallLocation"
+    StrCmp $2 "" legacyDone
+    IfFileExists "$2\uninstall.exe" 0 legacyDone
+    ExecWait '"$2\uninstall.exe" /S' $0
+    ${If} $0 != 0
+        Abort
+    ${EndIf}
+  legacyDone:
     Call CloseRunning
     SetOutPath "$INSTDIR"
     File "/oname=${APP_EXE}" "${EXE}"
     File "/oname=libmpv-2.dll" "${MPV_DLL}"
     WriteUninstaller "$INSTDIR\uninstall.exe"
     CreateShortcut "${SHORTCUT}" "$INSTDIR\${APP_EXE}"
-    DeleteRegValue HKCU "${RUN_KEY}" "VideoWallpaper"   ; the autostart section adds it back if selected
+    DeleteRegValue HKCU "${RUN_KEY}" "Muralop"   ; the autostart section adds it back if selected
 
     WriteRegStr HKCU "${UNINST_KEY}" "DisplayName" "${APP_NAME}"
     WriteRegStr HKCU "${UNINST_KEY}" "DisplayVersion" "${VERSION}"
     WriteRegStr HKCU "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\${APP_EXE}"
     WriteRegStr HKCU "${UNINST_KEY}" "Publisher" "sdutwsl"
-    WriteRegStr HKCU "${UNINST_KEY}" "URLInfoAbout" "https://github.com/sdutwsl/DesktopVideo"
+    WriteRegStr HKCU "${UNINST_KEY}" "URLInfoAbout" "https://github.com/sdutwsl/Muralop"
     WriteRegStr HKCU "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
     WriteRegStr HKCU "${UNINST_KEY}" "UninstallString" '"$INSTDIR\uninstall.exe"'
     WriteRegStr HKCU "${UNINST_KEY}" "QuietUninstallString" '"$INSTDIR\uninstall.exe" /S'
@@ -133,7 +143,7 @@ Section "!$(SecApp)" SecApp
 SectionEnd
 
 Section "$(SecAutostart)" SecAutostart
-    WriteRegStr HKCU "${RUN_KEY}" "VideoWallpaper" '"$INSTDIR\${APP_EXE}"'
+    WriteRegStr HKCU "${RUN_KEY}" "Muralop" '"$INSTDIR\${APP_EXE}"'
 SectionEnd
 
 Section "Uninstall"
@@ -143,6 +153,6 @@ Section "Uninstall"
     Delete "$INSTDIR\uninstall.exe"
     RMDir "$INSTDIR"
     Delete "${SHORTCUT}"
-    DeleteRegValue HKCU "${RUN_KEY}" "VideoWallpaper"
+    DeleteRegValue HKCU "${RUN_KEY}" "Muralop"
     DeleteRegKey HKCU "${UNINST_KEY}"
 SectionEnd

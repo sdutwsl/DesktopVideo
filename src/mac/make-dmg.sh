@@ -1,7 +1,7 @@
 #!/bin/sh
-# Turns the built VideoWallpaper.app into a self-contained, ad-hoc signed disk image.
+# Turns the built Muralop.app into a self-contained, ad-hoc signed disk image.
 # Run by `ninja dmg`:
-#   make-dmg.sh <VideoWallpaper.app> <output.dmg> <directory holding libmpv.dylib>
+#   make-dmg.sh <Muralop.app> <output.dmg> <directory holding libmpv.dylib>
 #
 # libmpv and everything it links (Homebrew's ffmpeg, libass, libplacebo, ...) are copied
 # into Contents/Frameworks by dylibbundler, and the bundle's minimum macOS version is
@@ -17,7 +17,7 @@ trap 'rm -rf "$work"' EXIT
 mkdir "$work/root"
 bundle="$work/root/$(basename "$app")"
 cp -R "$app" "$bundle"
-exe="$bundle/Contents/MacOS/VideoWallpaper"
+exe="$bundle/Contents/MacOS/Muralop"
 frameworks="$bundle/Contents/Frameworks"
 
 dylibbundler --create-dir --overwrite-files --bundle-deps --fix-file "$exe" \
@@ -59,7 +59,7 @@ ln -s /Applications "$work/root/Applications"
 rm -f "$dmg"
 # hdiutil now and then fails with "Resource busy" on CI machines; try again.
 for _ in 1 2 3; do
-    if hdiutil create -volname "Video Wallpaper" -srcfolder "$work/root" -fs HFS+ -format UDZO "$dmg"; then
+    if hdiutil create -volname "Muralop" -srcfolder "$work/root" -fs HFS+ -format UDZO "$dmg"; then
         exit 0
     fi
     sleep 5

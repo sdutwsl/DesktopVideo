@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace vw {
+namespace muralop {
 
 static const char* KEY_VIDEO = "video";
 static const char* KEY_VOLUME = "volume";
@@ -200,4 +200,4 @@ Wallpaper::Slot* Wallpaper::find(const std::string& monitorId)
     return nullptr;
 }
 
-} // namespace vw
+} // namespace muralop

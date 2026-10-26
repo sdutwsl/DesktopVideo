@@ -7,7 +7,7 @@
 
 struct mpv_handle;
 
-namespace vw {
+namespace muralop {
 
 // Thin wrapper around one libmpv core. Video goes either into a native window
 // (Windows HWND, mpv renders itself) or through mpv's render API into a GL
@@ -49,4 +49,4 @@ private:
     std::function<void()> wakeup_;
 };
 
-} // namespace vw
+} // namespace muralop

@@ -1,7 +1,7 @@
 #include "Menu.h"
 #include "Wallpaper.h"
 
-namespace vw {
+namespace muralop {
 
 std::vector<MenuItem> buildAppMenu(Wallpaper& wallpaper, const MenuActions& actions)
 {
@@ -59,4 +59,4 @@ std::vector<MenuItem> buildAppMenu(Wallpaper& wallpaper, const MenuActions& acti
     return menu;
 }
 
-} // namespace vw
+} // namespace muralop

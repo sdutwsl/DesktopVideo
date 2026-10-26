@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace vw {
+namespace muralop {
 
 // Platform-independent heart of the program: one player per monitor, which video
 // each one shows, and whether playback should currently be running.
@@ -72,4 +72,4 @@ private:
     bool suspended_ = false;
 };
 
-} // namespace vw
+} // namespace muralop

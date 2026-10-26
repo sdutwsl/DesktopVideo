@@ -14,7 +14,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-namespace vw {
+namespace muralop {
 
 LayerSurface::LayerSurface(WaylandDisplay& display, Output& output, const MonitorInfo& monitor)
     : display_(display), output_(output), monitor_(monitor)
@@ -148,7 +148,7 @@ void LayerSurface::wake()
 
 void LayerSurface::configure(uint32_t serial, uint32_t width, uint32_t height)
 {
-    if (getenv("VW_DEBUG"))
+    if (getenv("MURALOP_DEBUG"))
         fprintf(stderr, "[%s] layer configure %ux%u\n", monitor_.id.c_str(), width, height);
     zwlr_layer_surface_v1_ack_configure(layer_, serial);
     logicalWidth_ = width ? int(width) : monitor_.width;
@@ -240,7 +240,7 @@ void LayerSurface::render()
             {MPV_RENDER_PARAM_INVALID, nullptr},
         };
         mpv_render_context_render(render_, params);
-        if (getenv("VW_DEBUG") && (++framesDrawn_ == 1 || framesDrawn_ % 600 == 0))
+        if (getenv("MURALOP_DEBUG") && (++framesDrawn_ == 1 || framesDrawn_ % 600 == 0))
             fprintf(stderr, "[%s] frames drawn: %u (%dx%d)\n", monitor_.id.c_str(), framesDrawn_, bufferWidth_,
                     bufferHeight_);
     } else {
@@ -271,4 +271,4 @@ void LayerSurface::dispatch(short revents)
         render();
 }
 
-} // namespace vw
+} // namespace muralop
