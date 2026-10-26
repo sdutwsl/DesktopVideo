@@ -1,8 +1,10 @@
 name: build
 
 # Every push to master builds every variant. Pushing a tag v<VERSION>, where VERSION
-# matches project() in CMakeLists.txt, additionally publishes a GitHub release with
-# the Windows zip, the Ubuntu .deb and the Fedora .rpm.
+# matches project() in CMakeLists.txt, additionally publishes a GitHub release with the
+# Windows installers and portable zips (x64, ARM64) and the Ubuntu .deb and Fedora .rpm
+# (x86_64, aarch64). Each build job names its files videowallpaper-v<VERSION>-..., so the
+# release job only has to collect them.
 on:
   push:
     branches: [master]
@@ -13,16 +15,17 @@ on:
 permissions:
   contents: read
 
-env:
-  # The Windows build links against a libmpv dev archive (include/, libmpv.dll.a, libmpv-2.dll).
-  # SourceForge keeps every weekly build, so a pinned file stays downloadable.
-  MPV_SDK_URL: https://downloads.sourceforge.net/project/mpv-player-windows/libmpv/mpv-dev-x86_64-20261018-git-01e2533f31.7z
-  MPV_SDK_SHA256: d7f5621f42b6e161fe032df914a10bdece28a89df3e57c6c3e16a5a250929b5e
-
 jobs:
   nix:
-    name: Linux (Nix flake)
-    runs-on: ubuntu-latest
+    name: Linux ${{ matrix.system }} (Nix flake)
+    strategy:
+      matrix:
+        include:
+          - system: x86_64
+            runner: ubuntu-latest
+          - system: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
@@ -34,8 +37,15 @@ jobs:
   # The distro builds run in containers: sdbus-c++ 2 needs Ubuntu 26.04 / Fedora 44,
   # whatever the hosted runner images happen to be.
   ubuntu:
-    name: Linux (Ubuntu 26.04 .deb)
-    runs-on: ubuntu-latest
+    name: Linux ${{ matrix.arch }} (Ubuntu 26.04 .deb)
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     container: ubuntu:26.04
     steps:
       - name: Install dependencies
@@ -55,15 +65,24 @@ jobs:
         run: |
           cd build
           cpack -G DEB
-          dpkg-deb --info ./*.deb
+          deb=$(ls ./*.deb)
+          dpkg-deb --info "$deb"
+          mv "$deb" "videowallpaper-v$(dpkg-deb -f "$deb" Version)-ubuntu-26.04-$(dpkg-deb -f "$deb" Architecture).deb"
       - uses: actions/upload-artifact@v4
         with:
-          name: videowallpaper-ubuntu-26.04-amd64
-          path: build/*.deb
+          name: ubuntu-26.04-${{ matrix.arch }}
+          path: build/videowallpaper-v*.deb
 
   fedora:
-    name: Linux (Fedora 44 .rpm)
-    runs-on: ubuntu-latest
+    name: Linux ${{ matrix.arch }} (Fedora 44 .rpm)
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     container: fedora:44
     steps:
       - name: Install dependencies
@@ -79,38 +98,61 @@ jobs:
         run: |
           cd build
           cpack -G RPM
-          rpm -qip ./*.rpm
-          rpm -qpR ./*.rpm
+          rpm=$(ls ./*.rpm)
+          rpm -qip "$rpm"
+          rpm -qpR "$rpm"
+          mv "$rpm" "$(rpm -qp --qf 'videowallpaper-v%{VERSION}-fedora-44-%{ARCH}.rpm' "$rpm")"
       - uses: actions/upload-artifact@v4
         with:
-          name: videowallpaper-fedora-44-x86_64
-          path: build/*.rpm
+          name: fedora-44-${{ matrix.arch }}
+          path: build/videowallpaper-v*.rpm
 
   windows:
-    name: Windows (MinGW cross from Nix)
+    name: Windows ${{ matrix.arch }} (MinGW cross from Nix)
+    strategy:
+      matrix:
+        # The libmpv dev archives (include/, libmpv.dll.a, libmpv-2.dll) come from
+        # SourceForge, which keeps every weekly build, so a pinned file stays downloadable.
+        include:
+          - arch: x64
+            shell: mingw
+            toolchain: cmake/mingw-x86_64.cmake
+            sdk: mpv-dev-x86_64-20261018-git-01e2533f31.7z
+            sdk_sha256: d7f5621f42b6e161fe032df914a10bdece28a89df3e57c6c3e16a5a250929b5e
+          - arch: arm64
+            shell: mingw-arm64
+            toolchain: cmake/mingw-aarch64.cmake
+            sdk: mpv-dev-aarch64-20261018-git-01e2533f31.7z
+            sdk_sha256: 062b07022d1fadefd341485602658a51d973c216bb4282859e10daa09ad55478
     runs-on: ubuntu-latest
+    env:
+      SDK: ${{ matrix.sdk }}
+      SDK_SHA256: ${{ matrix.sdk_sha256 }}
+      SHELL_NAME: ${{ matrix.shell }}
+      TOOLCHAIN: ${{ matrix.toolchain }}
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
       - name: Fetch libmpv SDK
         run: |
-          curl -fsSL -o mpv-dev.7z "$MPV_SDK_URL"
-          echo "${MPV_SDK_SHA256}  mpv-dev.7z" | sha256sum -c -
-          nix develop .#mingw -c 7z x -y -o"$RUNNER_TEMP/mpv-sdk" mpv-dev.7z > /dev/null
+          curl -fsSL -o "$SDK" "https://downloads.sourceforge.net/project/mpv-player-windows/libmpv/$SDK"
+          echo "${SDK_SHA256}  $SDK" | sha256sum -c -
+          nix develop ".#$SHELL_NAME" -c 7zz x -y -o"$RUNNER_TEMP/mpv-sdk" "$SDK" > /dev/null
       - name: Build
         run: |
-          nix develop .#mingw -c cmake -S . -B build-win -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-toolchain.cmake \
-            -DMPV_SDK_DIR="$RUNNER_TEMP/mpv-sdk"
-          nix develop .#mingw -c ninja -C build-win
-      - name: Collect package
+          nix develop ".#$SHELL_NAME" -c cmake -S . -B build-win -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" -DMPV_SDK_DIR="$RUNNER_TEMP/mpv-sdk"
+          nix develop ".#$SHELL_NAME" -c ninja -C build-win
+      - name: Package installer and portable zip
         run: |
-          mkdir -p dist
-          cp build-win/videowallpaper.exe build-win/libmpv-2.dll dist/
+          nix develop ".#$SHELL_NAME" -c ninja -C build-win installer portable
+          ls -l build-win/videowallpaper-v*
       - uses: actions/upload-artifact@v4
         with:
-          name: videowallpaper-windows-x64
-          path: dist/
+          name: windows-${{ matrix.arch }}
+          path: |
+            build-win/videowallpaper-v*-setup.exe
+            build-win/videowallpaper-v*-portable.zip
 
   release:
     name: Publish release
@@ -131,18 +173,13 @@ jobs:
           fi
       - uses: actions/download-artifact@v4
         with:
-          path: artifacts
-      - name: Assemble assets
+          path: assets
+          merge-multiple: true
+      - name: Checksums
         run: |
-          mkdir -p assets
-          (cd artifacts/videowallpaper-windows-x64 &&
-            zip -9 "$GITHUB_WORKSPACE/assets/videowallpaper-${GITHUB_REF_NAME}-windows-x64.zip" videowallpaper.exe libmpv-2.dll)
-          cp artifacts/videowallpaper-ubuntu-26.04-amd64/*.deb \
-            "assets/videowallpaper-${GITHUB_REF_NAME}-ubuntu-26.04-amd64.deb"
-          cp artifacts/videowallpaper-fedora-44-x86_64/*.rpm \
-            "assets/videowallpaper-${GITHUB_REF_NAME}-fedora-44-x86_64.rpm"
-          (cd assets && sha256sum -- * > SHA256SUMS)
-          ls -l assets
+          cd assets
+          sha256sum -- * > SHA256SUMS
+          ls -l
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}

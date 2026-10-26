@@ -38,8 +38,20 @@ struct App {
 };
 App app;
 
+// Portable mode: a config.ini next to the exe (the portable zip ships one) keeps the
+// settings in that folder; otherwise they live in %APPDATA%\VideoWallpaper.
 std::string configPath()
 {
+    wchar_t exe[MAX_PATH] = {0};
+    const DWORD len = GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    if (len > 0 && len < MAX_PATH) {
+        std::wstring local(exe, len);
+        local.resize(local.find_last_of(L'\\') + 1);
+        local += L"config.ini";
+        if (GetFileAttributesW(local.c_str()) != INVALID_FILE_ATTRIBUTES)
+            return toUtf8(local.c_str());
+    }
+
     wchar_t dir[MAX_PATH] = {0};
     if (FAILED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, dir)))
         return "config.ini";

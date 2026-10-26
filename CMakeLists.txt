@@ -51,6 +51,41 @@ if(WIN32)
         add_custom_command(TARGET videowallpaper POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different "${Mpv_DLL}" "$<TARGET_FILE_DIR:videowallpaper>"
             COMMENT "Copying libmpv runtime")
+
+        # Release packages: `ninja portable installer`.
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+            set(VW_WIN_ARCH arm64)
+        else()
+            set(VW_WIN_ARCH x64)
+        endif()
+        set(VW_PACKAGE "${CMAKE_CURRENT_BINARY_DIR}/videowallpaper-v${PROJECT_VERSION}-windows-${VW_WIN_ARCH}")
+
+        # A zip with one VideoWallpaper folder; the config.ini in it switches on portable mode.
+        set(PORTABLE_ROOT "${CMAKE_CURRENT_BINARY_DIR}/portable")
+        add_custom_target(portable
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "${PORTABLE_ROOT}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${PORTABLE_ROOT}/VideoWallpaper"
+            COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:videowallpaper>" "${Mpv_DLL}" "${PORTABLE_ROOT}/VideoWallpaper"
+            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/src/win/portable-config.ini"
+                    "${PORTABLE_ROOT}/VideoWallpaper/config.ini"
+            COMMAND ${CMAKE_COMMAND} -E chdir "${PORTABLE_ROOT}"
+                    ${CMAKE_COMMAND} -E tar cf "${VW_PACKAGE}-portable.zip" --format=zip VideoWallpaper
+            DEPENDS videowallpaper
+            COMMENT "Packing ${VW_PACKAGE}-portable.zip"
+            VERBATIM)
+
+        find_program(MAKENSIS makensis)
+        if(MAKENSIS)
+            add_custom_target(installer
+                COMMAND "${MAKENSIS}" -V2 -WX -INPUTCHARSET UTF8
+                        "-DVERSION=${PROJECT_VERSION}" "-DARCH=${VW_WIN_ARCH}"
+                        "-DEXE=$<TARGET_FILE:videowallpaper>" "-DMPV_DLL=${Mpv_DLL}"
+                        "-DOUTFILE=${VW_PACKAGE}-setup.exe"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/src/win/installer.nsi"
+                DEPENDS videowallpaper
+                COMMENT "Building ${VW_PACKAGE}-setup.exe"
+                VERBATIM)
+        endif()
     endif()
 
 # ---- Linux: Wayland layer-shell + StatusNotifierItem -------------------------------

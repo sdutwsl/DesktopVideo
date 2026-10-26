@@ -15,6 +15,13 @@
         "aarch64-linux"
       ];
       forAll = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      windowsTools =
+        pkgs: with pkgs; [
+          cmake
+          ninja
+          _7zz # 7zz unpacks the libmpv SDK (p7zip cannot read the ARM64 archive's filter)
+          nsis # makensis, for `ninja installer`
+        ];
     in
     {
       packages = forAll (pkgs: rec {
@@ -35,15 +42,14 @@
         default = pkgs.mkShell {
           inputsFrom = [ self.packages.${pkgs.stdenv.hostPlatform.system}.default ];
         };
-        # Cross-compile the Windows exe: nix develop .#mingw, then use cmake/mingw-toolchain.cmake
+        # Cross-compile the Windows exe and its packages: nix develop .#mingw (x64, with
+        # cmake/mingw-x86_64.cmake) or .#mingw-arm64 (ARM64, with cmake/mingw-aarch64.cmake).
         mingw = pkgs.mkShell {
-          nativeBuildInputs = with pkgs; [
-            cmake
-            ninja
-            p7zip # unpack the libmpv SDK (mpv-dev-x86_64-*.7z)
-            pkgsCross.mingwW64.stdenv.cc
-          ];
+          nativeBuildInputs = windowsTools pkgs ++ [ pkgs.pkgsCross.mingwW64.stdenv.cc ];
           buildInputs = [ pkgs.pkgsCross.mingwW64.windows.mcfgthreads ];
+        };
+        mingw-arm64 = pkgs.mkShell {
+          nativeBuildInputs = windowsTools pkgs ++ [ pkgs.pkgsCross.ucrtAarch64.stdenv.cc ];
         };
       });
 

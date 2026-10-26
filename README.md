@@ -7,7 +7,7 @@
 | 平台 | 壁纸层 | 托盘 | 状态 |
 |---|---|---|---|
 | **Linux Wayland** | `wlr-layer-shell` background 层 + 自绘（EGL/GLES2） | StatusNotifierItem（D-Bus） | KDE Plasma 6 上验证通过 |
-| **Windows** | Explorer 的 `WorkerW`（桌面图标之下） | `Shell_NotifyIcon` | 从 v1 移植，MinGW 构建由 CI 覆盖，尚未在真机验证 |
+| **Windows** | Explorer 的 `WorkerW`（桌面图标之下） | `Shell_NotifyIcon` | 从 v1 移植，x64 / ARM64 构建由 CI 覆盖，尚未在真机验证 |
 
 A video wallpaper player: shared libmpv core, native shells for Wayland (layer-shell) and Windows (WorkerW).
 
@@ -39,8 +39,8 @@ GNOME 用户请用 [Hanabi](https://github.com/jeffshee/gnome-ext-hanabi) 之类
 
 现成的包在 [Releases](https://github.com/sdutwsl/DesktopVideo/releases)，依赖会自动装上：
 
-- Ubuntu 26.04 / Debian 13：`sudo apt install ./videowallpaper-*-ubuntu-26.04-amd64.deb`
-- Fedora 44：`sudo dnf install ./videowallpaper-*-fedora-44-x86_64.rpm`
+- Ubuntu 26.04 / Debian 13：`sudo apt install ./videowallpaper-*-ubuntu-26.04-amd64.deb`（ARM 机器用 `-arm64.deb`）
+- Fedora 44：`sudo dnf install ./videowallpaper-*-fedora-44-x86_64.rpm`（ARM 机器用 `-aarch64.rpm`）
 
 依赖：`libmpv`、`wayland-client`、`wayland-egl`、`egl`、`glesv2`、`sdbus-c++` ≥ 2.0、`wayland-scanner`、CMake ≥ 3.20、C++20 编译器。
 sdbus-c++ 2 的 API 和 1.x 不兼容，所以 Ubuntu 24.04（只有 1.4）不能直接构建。
@@ -110,21 +110,27 @@ home-manager 用户换成 `inputs.videowallpaper.homeModules.default`，选项�
 
 ## Windows
 
-依赖：MinGW-w64（GCC ≥ 13），CMake，libmpv 的 Windows 开发包。不支持 MSVC：libmpv 的 Windows 包只带 MinGW 导入库。
+[Releases](https://github.com/sdutwsl/DesktopVideo/releases) 里每个版本有 x64 和 ARM64（骁龙等 Windows on ARM 设备）两套：
 
-现成的 exe：[Releases](https://github.com/sdutwsl/DesktopVideo/releases) 里的 `videowallpaper-v*-windows-x64.zip`（`videowallpaper.exe` + `libmpv-2.dll`，解压即用）；master 每次提交的构建在 [Actions](https://github.com/sdutwsl/DesktopVideo/actions/workflows/build.yml) 的 `videowallpaper-windows-x64` 产物里。
+- **安装包** `videowallpaper-v*-windows-<arch>-setup.exe`：装到 `%LOCALAPPDATA%\Programs\VideoWallpaper`，不需要管理员权限；有开始菜单快捷方式，可选开机自启，可在“设置 → 应用”里卸载。安装和卸载前会让正在运行的壁纸先正常退出。
+- **便携版** `videowallpaper-v*-windows-<arch>-portable.zip`：解压出 `VideoWallpaper` 文件夹直接运行。文件夹里的 `config.ini` 让设置保存在它旁边，不写 `%APPDATA%`，也不碰注册表；删掉它就改用 `%APPDATA%\VideoWallpaper\config.ini`。
 
-自己构建：
+master 每次提交的构建在 [Actions](https://github.com/sdutwsl/DesktopVideo/actions/workflows/build.yml) 的 `windows-x64` / `windows-arm64` 产物里。安装包没有代码签名，第一次运行 SmartScreen 会提示，点“更多信息 → 仍要运行”。
 
-1. 从 <https://sourceforge.net/projects/mpv-player-windows/files/libmpv/> 下载 `mpv-dev-x86_64-*.7z` 并解压（含 `include/`、`libmpv.dll.a`、`libmpv-2.dll`；CI 固定用 `mpv-dev-x86_64-20261018-git-01e2533f31.7z`）。
-2. 构建（MSYS2 的 MinGW64 环境，或在 Linux 上 `nix develop .#mingw` 交叉编译）：
+运行后右键托盘图标选择视频；把视频文件拖到 exe 上也可以。
+
+### 构建
+
+依赖：MinGW-w64（x64 用 GCC ≥ 13，ARM64 用 LLVM/clang），CMake，libmpv 的 Windows 开发包；打安装包还要 NSIS（`makensis`）。不支持 MSVC：libmpv 的 Windows 包只带 MinGW 导入库。
+
+1. 从 <https://sourceforge.net/projects/mpv-player-windows/files/libmpv/> 下载 `mpv-dev-x86_64-*.7z` 或 `mpv-dev-aarch64-*.7z`，用 7-Zip 解压（含 `include/`、`libmpv.dll.a`、`libmpv-2.dll`；ARM64 的包要较新的 7-Zip，p7zip 解不开。CI 固定用 `20261018-git-01e2533f31` 这一版）。
+2. 构建。在 Linux 上交叉编译：x64 用 `nix develop .#mingw`，ARM64 用 `nix develop .#mingw-arm64`。在 Windows 上用 MSYS2 的 MinGW64 / CLANGARM64 环境，不需要工具链文件。
    ```sh
    cmake -S . -B build-win -G Ninja -DMPV_SDK_DIR=/path/to/mpv-dev \
-         -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-toolchain.cmake   # 仅交叉编译时需要
-   ninja -C build-win
+         -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-x86_64.cmake   # ARM64：cmake/mingw-aarch64.cmake
+   ninja -C build-win                       # videowallpaper.exe，libmpv-2.dll 会复制到旁边
+   ninja -C build-win installer portable    # videowallpaper-v<版本>-windows-<arch>-setup.exe / -portable.zip
    ```
-   `libmpv-2.dll` 会自动复制到输出目录。
-3. 运行 `videowallpaper.exe`，右键托盘图标选择视频。把视频文件拖到 exe 上也可以。
 
 ## 配置文件
 
@@ -148,17 +154,17 @@ audio_monitor=DP-1             # 哪个显示器出声，留空用主屏
 git tag v2.1.0 && git push origin v2.1.0
 ```
 
-CI 跑完全部构建后自动创建 GitHub Release，附上 `videowallpaper-v2.1.0-windows-x64.zip`、`videowallpaper-v2.1.0-ubuntu-26.04-amd64.deb`、`videowallpaper-v2.1.0-fedora-44-x86_64.rpm` 和 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v2.1.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
+CI 跑完全部构建后自动创建 GitHub Release，附上 Windows x64 / ARM64 的安装包和便携 zip、Ubuntu 26.04 的 amd64 / arm64 `.deb`、Fedora 44 的 x86_64 / aarch64 `.rpm`，以及 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v2.1.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
 
 ## 代码结构
 
 ```
 src/core/       平台无关：libmpv 封装、配置、多屏控制器、菜单模型
 src/wayland/    layer-shell 表面 + EGL 渲染、事件循环、SNI 托盘、D-Bus 会话事件
-src/win/        WorkerW 表面、Shell_NotifyIcon 托盘、锁屏检测
-cmake/          FindMpv、MinGW 工具链
+src/win/        WorkerW 表面、Shell_NotifyIcon 托盘、锁屏检测、NSIS 安装脚本
+cmake/          FindMpv、MinGW 工具链（x86_64 / aarch64）
 nix/            Nix 包、NixOS / home-manager 模块
-.github/        CI：Nix、Ubuntu 26.04（.deb）、Fedora 44（.rpm）、MinGW 交叉构建，打 tag 时发布 release
+.github/        CI：Nix、Ubuntu 26.04（.deb）、Fedora 44（.rpm）各在 x86_64 和 aarch64 上构建，Windows x64 / ARM64 交叉构建，打 tag 时发布 release
 Archived/       v1（C# WinForms 客户端 + C++ socket 服务端），仅存档
 ```
 
