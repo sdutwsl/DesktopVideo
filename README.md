@@ -12,6 +12,8 @@
 
 A video wallpaper player: shared libmpv core, native shells for Wayland (layer-shell), Windows (WorkerW) and macOS (desktop-level windows).
 
+v2.2.0 及更早版本仍使用 VideoWallpaper 名称；Muralop 从 v3.0.0 起使用新名称和包名。正式版发布前，可以从 [master 的 Actions 构建](https://github.com/sdutwsl/Muralop/actions/workflows/build.yml)下载构建产物。
+
 ## 功能
 
 - 多显示器：每个显示器一个播放器，可分别指定视频；只有主屏出声
@@ -38,7 +40,7 @@ GNOME 用户请用 [Hanabi](https://github.com/jeffshee/gnome-ext-hanabi) 之类
 
 ### 构建
 
-现成的包在 [Releases](https://github.com/sdutwsl/Muralop/releases)，依赖会自动装上：
+v3.0.0 起，安装包在 [Releases](https://github.com/sdutwsl/Muralop/releases)，依赖会自动装上：
 
 - Ubuntu 26.04 / Debian 13：`sudo apt install ./muralop-*-ubuntu-26.04-amd64.deb`（ARM 机器用 `-arm64.deb`）
 - Fedora 44：`sudo dnf install ./muralop-*-fedora-44-x86_64.rpm`（ARM 机器用 `-aarch64.rpm`）
@@ -111,7 +113,7 @@ home-manager 用户换成 `inputs.muralop.homeModules.default`，选项相同。
 
 ## Windows
 
-[Releases](https://github.com/sdutwsl/Muralop/releases) 里每个版本有 x64 和 ARM64（骁龙等 Windows on ARM 设备）两套：
+v3.0.0 起，[Releases](https://github.com/sdutwsl/Muralop/releases) 里每个版本有 x64 和 ARM64（骁龙等 Windows on ARM 设备）两套：
 
 - **安装包** `muralop-v*-windows-<arch>-setup.exe`：装到 `%LOCALAPPDATA%\Programs\Muralop`，不需要管理员权限；有开始菜单快捷方式，可选开机自启，可在“设置 → 应用”里卸载。安装和卸载前会让正在运行的壁纸先正常退出。
 - **便携版** `muralop-v*-windows-<arch>-portable.zip`：解压出 `Muralop` 文件夹直接运行。文件夹里的 `config.ini` 让设置保存在它旁边，不写 `%APPDATA%`，也不碰注册表；删掉它就改用 `%APPDATA%\Muralop\config.ini`。
@@ -135,7 +137,7 @@ master 每次提交的构建在 [Actions](https://github.com/sdutwsl/Muralop/act
 
 ## macOS
 
-[Releases](https://github.com/sdutwsl/Muralop/releases) 里的 `muralop-v*-macos-arm64.dmg`：Apple Silicon（M 系列芯片），macOS 15 及以上。
+v3.0.0 起，[Releases](https://github.com/sdutwsl/Muralop/releases) 里的 `muralop-v*-macos-arm64.dmg`：Apple Silicon（M 系列芯片），macOS 15 及以上。
 没有 Intel 版：Homebrew 已经不给 Intel Mac 出 mpv 的预编译包。
 
 打开 dmg，把 `Muralop` 拖进“应用程序”。这个包没有 Apple 开发者签名和公证，第一次打开会提示无法验证开发者：点“完成”，再到“系统设置 → 隐私与安全性”底部点“仍要打开”。
