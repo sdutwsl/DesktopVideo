@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 # The single version number: the Nix package reads it from here, and release tags must be v<VERSION>.
-project(VideoWallpaper VERSION 2.0.0 LANGUAGES C CXX)
+project(VideoWallpaper VERSION 2.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
