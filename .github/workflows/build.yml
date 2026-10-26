@@ -221,10 +221,15 @@ jobs:
         if: runner.os == 'Linux'
         env:
           QT_QPA_PLATFORM: offscreen
+          QTWEBENGINE_DISABLE_SANDBOX: '1'
+          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
         run: |
-          python -m pytest tests -q
+          python -m pytest tests -vv -s
           python gui/main.py --smoke-test gui-preview.png
       - name: Package GUI, yt-dlp and Deno
+        env:
+          QTWEBENGINE_DISABLE_SANDBOX: ${{ runner.os == 'Linux' && '1' || '' }}
+          QTWEBENGINE_CHROMIUM_FLAGS: ${{ runner.os == 'Linux' && '--disable-gpu' || '' }}
         run: python gui/package.py --backend-dir backend
       - name: Archive GUI bundle
         shell: bash
