@@ -52,7 +52,7 @@ std::string defaultConfigPath()
 // Send a command to the running daemon.
 int forward(sdbus::IConnection& bus, const std::vector<std::string>& args)
 {
-    auto proxy = sdbus::createProxy(bus, Control::SERVICE, Control::PATH);
+    auto proxy = sdbus::createProxy(bus, sdbus::ServiceName(Control::SERVICE), sdbus::ObjectPath(Control::PATH));
     auto call = [&](const char* method, auto&&... a) {
         proxy->callMethod(method).onInterface(Control::INTERFACE).withArguments(std::forward<decltype(a)>(a)...);
     };
@@ -152,7 +152,7 @@ int main(int argc, char** argv)
     std::unique_ptr<sdbus::IConnection> session;
     try {
         session = sdbus::createSessionBusConnection();
-        session->requestName(Control::SERVICE);
+        session->requestName(sdbus::ServiceName(Control::SERVICE));
     } catch (const sdbus::Error& e) {
         if (!session) {
             fprintf(stderr, "videowallpaper: cannot connect to the session bus: %s\n", e.getMessage().c_str());
@@ -183,15 +183,13 @@ int main(int argc, char** argv)
     }
 
     EventLoop loop;
-    DBusSource sessionSource(*session);
-    loop.add(&sessionSource);
+    DBusSource sessionSource(loop, *session);
 
     std::unique_ptr<sdbus::IConnection> system;
     std::unique_ptr<DBusSource> systemSource;
     try {
         system = sdbus::createSystemBusConnection();
-        systemSource = std::make_unique<DBusSource>(*system);
-        loop.add(systemSource.get());
+        systemSource = std::make_unique<DBusSource>(loop, *system);
     } catch (const sdbus::Error&) {
         fputs("[session] system bus unavailable; sleep/shutdown events disabled\n", stderr);
     }

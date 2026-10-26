@@ -9,7 +9,7 @@ namespace vw {
 
 SessionMonitor::SessionMonitor(sdbus::IConnection& sessionBus, sdbus::IConnection* systemBus)
 {
-    auto lockHandler = [this](sdbus::Message& msg) {
+    auto lockHandler = [this](sdbus::Message msg) {
         bool active = false;
         msg >> active;
         if (onLocked)
@@ -17,28 +17,30 @@ SessionMonitor::SessionMonitor(sdbus::IConnection& sessionBus, sdbus::IConnectio
     };
     // KDE and most others speak the freedesktop interface, GNOME its own; both carry the same bool.
     matches_.push_back(sessionBus.addMatch(
-        "type='signal',interface='org.freedesktop.ScreenSaver',member='ActiveChanged'", lockHandler));
+        "type='signal',interface='org.freedesktop.ScreenSaver',member='ActiveChanged'", lockHandler, sdbus::return_slot));
     matches_.push_back(sessionBus.addMatch(
-        "type='signal',interface='org.gnome.ScreenSaver',member='ActiveChanged'", lockHandler));
+        "type='signal',interface='org.gnome.ScreenSaver',member='ActiveChanged'", lockHandler, sdbus::return_slot));
 
     if (!systemBus)
         return;
     matches_.push_back(systemBus->addMatch(
         "type='signal',sender='org.freedesktop.login1',interface='org.freedesktop.login1.Manager',member='PrepareForSleep'",
-        [this](sdbus::Message& msg) {
+        [this](sdbus::Message msg) {
             bool sleeping = false;
             msg >> sleeping;
             if (onSleep)
                 onSleep(sleeping);
-        }));
+        },
+        sdbus::return_slot));
     matches_.push_back(systemBus->addMatch(
         "type='signal',sender='org.freedesktop.login1',interface='org.freedesktop.login1.Manager',member='PrepareForShutdown'",
-        [this](sdbus::Message& msg) {
+        [this](sdbus::Message msg) {
             bool shuttingDown = false;
             msg >> shuttingDown;
             if (shuttingDown && onShutdown)
                 onShutdown();
-        }));
+        },
+        sdbus::return_slot));
 }
 
 // ---- FileChooser ------------------------------------------------------------------
@@ -62,7 +64,8 @@ static std::string uriToPath(const std::string& uri)
 
 FileChooser::FileChooser(sdbus::IConnection& sessionBus) : bus_(sessionBus)
 {
-    portal_ = sdbus::createProxy(bus_, "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop");
+    portal_ = sdbus::createProxy(bus_, sdbus::ServiceName("org.freedesktop.portal.Desktop"),
+                                 sdbus::ObjectPath("/org/freedesktop/portal/desktop"));
 }
 
 void FileChooser::open(const std::string& title, std::function<void(std::string)> onDone)
@@ -78,7 +81,7 @@ void FileChooser::open(const std::string& title, std::function<void(std::string)
 
     response_ = bus_.addMatch(
         "type='signal',interface='org.freedesktop.portal.Request',member='Response',path='" + requestPath + "'",
-        [onDone](sdbus::Message& msg) {
+        [onDone](sdbus::Message msg) {
             uint32_t code = 1;
             std::map<std::string, sdbus::Variant> results;
             msg >> code >> results;
@@ -92,7 +95,8 @@ void FileChooser::open(const std::string& title, std::function<void(std::string)
                 }
             }
             onDone(chosen);
-        });
+        },
+        sdbus::return_slot);
 
     using Filter = sdbus::Struct<std::string, std::vector<sdbus::Struct<uint32_t, std::string>>>;
     std::vector<Filter> filters = {
@@ -107,7 +111,7 @@ void FileChooser::open(const std::string& title, std::function<void(std::string)
     portal_->callMethodAsync("OpenFile")
         .onInterface("org.freedesktop.portal.FileChooser")
         .withArguments(std::string(), title, options)
-        .uponReplyInvoke([onDone](const sdbus::Error* error, sdbus::ObjectPath) {
+        .uponReplyInvoke([onDone](std::optional<sdbus::Error> error, sdbus::ObjectPath) {
             if (error) {
                 fprintf(stderr, "[portal] file chooser unavailable: %s\n", error->getMessage().c_str());
                 onDone("");
@@ -123,18 +127,17 @@ const char* Control::INTERFACE = "org.videowallpaper.Daemon";
 
 Control::Control(sdbus::IConnection& bus, Handlers handlers) : handlers_(std::move(handlers))
 {
-    object_ = sdbus::createObject(bus, PATH);
-    auto& o = *object_;
-    o.registerMethod("SetVideo").onInterface(INTERFACE).implementedAs(
-        [this](std::string path, std::string monitor) { handlers_.setVideo(path, monitor); });
-    o.registerMethod("ChooseVideo").onInterface(INTERFACE).implementedAs(
-        [this](std::string monitor) { handlers_.chooseVideo(monitor); });
-    o.registerMethod("SetPaused").onInterface(INTERFACE).implementedAs([this](bool paused) { handlers_.setPaused(paused); });
-    o.registerMethod("SetMute").onInterface(INTERFACE).implementedAs([this](bool mute) { handlers_.setMute(mute); });
-    o.registerMethod("SetVolume").onInterface(INTERFACE).implementedAs([this](int32_t volume) { handlers_.setVolume(volume); });
-    o.registerMethod("GetMonitors").onInterface(INTERFACE).implementedAs([this] { return handlers_.monitors(); });
-    o.registerMethod("Quit").onInterface(INTERFACE).implementedAs([this] { handlers_.quit(); });
-    o.finishRegistration();
+    object_ = sdbus::createObject(bus, sdbus::ObjectPath(PATH));
+    object_->addVTable(
+        sdbus::registerMethod("SetVideo").implementedAs(
+            [this](std::string path, std::string monitor) { handlers_.setVideo(path, monitor); }),
+        sdbus::registerMethod("ChooseVideo").implementedAs([this](std::string monitor) { handlers_.chooseVideo(monitor); }),
+        sdbus::registerMethod("SetPaused").implementedAs([this](bool paused) { handlers_.setPaused(paused); }),
+        sdbus::registerMethod("SetMute").implementedAs([this](bool mute) { handlers_.setMute(mute); }),
+        sdbus::registerMethod("SetVolume").implementedAs([this](int32_t volume) { handlers_.setVolume(volume); }),
+        sdbus::registerMethod("GetMonitors").implementedAs([this] { return handlers_.monitors(); }),
+        sdbus::registerMethod("Quit").implementedAs([this] { handlers_.quit(); }))
+        .forInterface(INTERFACE);
 }
 
 } // namespace vw

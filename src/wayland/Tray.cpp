@@ -15,7 +15,7 @@ Tray::Tray(sdbus::IConnection& bus, std::string id, std::string title)
     : bus_(bus), id_(std::move(id)), title_(std::move(title))
 {
     busName_ = std::string(SNI) + "-" + std::to_string(getpid()) + "-1";
-    bus_.requestName(busName_);
+    bus_.requestName(sdbus::ServiceName(busName_));
     exportItem();
     exportMenu();
     registerWithWatcher();
@@ -24,13 +24,14 @@ Tray::Tray(sdbus::IConnection& bus, std::string id, std::string title)
     watcherMatch_ = bus_.addMatch(
         "type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',"
         "member='NameOwnerChanged',arg0='" + std::string(WATCHER) + "'",
-        [this](sdbus::Message& msg) {
+        [this](sdbus::Message msg) {
             std::string name, oldOwner, newOwner;
             msg >> name >> oldOwner >> newOwner;
             registered_ = false;
             if (!newOwner.empty())
                 registerWithWatcher();
-        });
+        },
+        sdbus::return_slot);
 }
 
 Tray::~Tray()
@@ -40,7 +41,7 @@ Tray::~Tray()
     menu_.reset();
     item_.reset();
     try {
-        bus_.releaseName(busName_);
+        bus_.releaseName(sdbus::ServiceName(busName_));
     } catch (const sdbus::Error&) {
     }
 }
@@ -49,52 +50,51 @@ Tray::~Tray()
 
 void Tray::exportItem()
 {
-    item_ = sdbus::createObject(bus_, "/StatusNotifierItem");
-    auto& o = *item_;
+    item_ = sdbus::createObject(bus_, sdbus::ObjectPath("/StatusNotifierItem"));
+    item_->addVTable(
+        sdbus::registerProperty("Category").withGetter([] { return std::string("ApplicationStatus"); }),
+        sdbus::registerProperty("Id").withGetter([this] { return id_; }),
+        sdbus::registerProperty("Title").withGetter([this] { return title_; }),
+        sdbus::registerProperty("Status").withGetter([] { return std::string("Active"); }),
+        sdbus::registerProperty("WindowId").withGetter([] { return int32_t(0); }),
+        sdbus::registerProperty("IconName").withGetter([] { return std::string("preferences-desktop-wallpaper"); }),
+        sdbus::registerProperty("IconPixmap").withGetter([] { return makeIcon(); }),
+        sdbus::registerProperty("OverlayIconName").withGetter([] { return std::string(); }),
+        sdbus::registerProperty("AttentionIconName").withGetter([] { return std::string(); }),
+        sdbus::registerProperty("AttentionMovieName").withGetter([] { return std::string(); }),
+        sdbus::registerProperty("ToolTip").withGetter([this] {
+            return sdbus::Struct<std::string, std::vector<Pixmap>, std::string, std::string>(
+                "preferences-desktop-wallpaper", std::vector<Pixmap>{}, title_, "");
+        }),
+        sdbus::registerProperty("ItemIsMenu").withGetter([] { return true; }),
+        sdbus::registerProperty("Menu").withGetter([] { return sdbus::ObjectPath("/MenuBar"); }),
 
-    o.registerProperty("Category").onInterface(SNI).withGetter([] { return std::string("ApplicationStatus"); });
-    o.registerProperty("Id").onInterface(SNI).withGetter([this] { return id_; });
-    o.registerProperty("Title").onInterface(SNI).withGetter([this] { return title_; });
-    o.registerProperty("Status").onInterface(SNI).withGetter([] { return std::string("Active"); });
-    o.registerProperty("WindowId").onInterface(SNI).withGetter([] { return int32_t(0); });
-    o.registerProperty("IconName").onInterface(SNI).withGetter([] { return std::string("preferences-desktop-wallpaper"); });
-    o.registerProperty("IconPixmap").onInterface(SNI).withGetter([] { return makeIcon(); });
-    o.registerProperty("OverlayIconName").onInterface(SNI).withGetter([] { return std::string(); });
-    o.registerProperty("AttentionIconName").onInterface(SNI).withGetter([] { return std::string(); });
-    o.registerProperty("AttentionMovieName").onInterface(SNI).withGetter([] { return std::string(); });
-    o.registerProperty("ToolTip").onInterface(SNI).withGetter([this] {
-        return sdbus::Struct<std::string, std::vector<Pixmap>, std::string, std::string>(
-            "preferences-desktop-wallpaper", std::vector<Pixmap>{}, title_, "");
-    });
-    o.registerProperty("ItemIsMenu").onInterface(SNI).withGetter([] { return true; });
-    o.registerProperty("Menu").onInterface(SNI).withGetter([] { return sdbus::ObjectPath("/MenuBar"); });
+        sdbus::registerMethod("ContextMenu").implementedAs([](int32_t, int32_t) {}),
+        sdbus::registerMethod("Activate").implementedAs([this](int32_t, int32_t) {
+            if (onActivate)
+                onActivate();
+        }),
+        sdbus::registerMethod("SecondaryActivate").implementedAs([](int32_t, int32_t) {}),
+        sdbus::registerMethod("Scroll").implementedAs([](int32_t, std::string) {}),
 
-    o.registerMethod("ContextMenu").onInterface(SNI).implementedAs([](int32_t, int32_t) {});
-    o.registerMethod("Activate").onInterface(SNI).implementedAs([this](int32_t, int32_t) {
-        if (onActivate)
-            onActivate();
-    });
-    o.registerMethod("SecondaryActivate").onInterface(SNI).implementedAs([](int32_t, int32_t) {});
-    o.registerMethod("Scroll").onInterface(SNI).implementedAs([](int32_t, std::string) {});
-
-    o.registerSignal("NewTitle").onInterface(SNI);
-    o.registerSignal("NewIcon").onInterface(SNI);
-    o.registerSignal("NewAttentionIcon").onInterface(SNI);
-    o.registerSignal("NewOverlayIcon").onInterface(SNI);
-    o.registerSignal("NewToolTip").onInterface(SNI);
-    o.registerSignal("NewStatus").onInterface(SNI).withParameters<std::string>();
-    o.finishRegistration();
+        sdbus::registerSignal("NewTitle"),
+        sdbus::registerSignal("NewIcon"),
+        sdbus::registerSignal("NewAttentionIcon"),
+        sdbus::registerSignal("NewOverlayIcon"),
+        sdbus::registerSignal("NewToolTip"),
+        sdbus::registerSignal("NewStatus").withParameters<std::string>())
+        .forInterface(SNI);
 }
 
 void Tray::registerWithWatcher()
 {
     if (registered_)
         return;
-    watcher_ = sdbus::createProxy(bus_, WATCHER, "/StatusNotifierWatcher");
+    watcher_ = sdbus::createProxy(bus_, sdbus::ServiceName(WATCHER), sdbus::ObjectPath("/StatusNotifierWatcher"));
     watcher_->callMethodAsync("RegisterStatusNotifierItem")
         .onInterface(WATCHER)
         .withArguments(busName_)
-        .uponReplyInvoke([this](const sdbus::Error* error) {
+        .uponReplyInvoke([this](std::optional<sdbus::Error> error) {
             if (error)
                 fprintf(stderr, "[tray] no StatusNotifierWatcher on the bus (%s); the tray icon will appear once a panel starts\n",
                         error->getMessage().c_str());
@@ -151,71 +151,70 @@ std::vector<Tray::Pixmap> Tray::makeIcon()
 
 void Tray::exportMenu()
 {
-    menu_ = sdbus::createObject(bus_, "/MenuBar");
-    auto& o = *menu_;
+    menu_ = sdbus::createObject(bus_, sdbus::ObjectPath("/MenuBar"));
+    menu_->addVTable(
+        sdbus::registerProperty("Version").withGetter([] { return uint32_t(3); }),
+        sdbus::registerProperty("Status").withGetter([] { return std::string("normal"); }),
+        sdbus::registerProperty("TextDirection").withGetter([] { return std::string("ltr"); }),
+        sdbus::registerProperty("IconThemePath").withGetter([] { return std::vector<std::string>{}; }),
 
-    o.registerProperty("Version").onInterface(DBUSMENU).withGetter([] { return uint32_t(3); });
-    o.registerProperty("Status").onInterface(DBUSMENU).withGetter([] { return std::string("normal"); });
-    o.registerProperty("TextDirection").onInterface(DBUSMENU).withGetter([] { return std::string("ltr"); });
-    o.registerProperty("IconThemePath").onInterface(DBUSMENU).withGetter([] { return std::vector<std::string>{}; });
-
-    o.registerMethod("GetLayout").onInterface(DBUSMENU).implementedAs(
-        [this](int32_t parent, int32_t depth, std::vector<std::string> names) {
-            return std::tuple<uint32_t, Layout>(revision_, layoutFor(parent, depth, names));
-        });
-    o.registerMethod("GetGroupProperties").onInterface(DBUSMENU).implementedAs(
-        [this](std::vector<int32_t> ids, std::vector<std::string> names) {
-            std::vector<sdbus::Struct<int32_t, Props>> out;
-            for (int32_t id : ids)
-                if (const Node* n = find(id))
-                    out.emplace_back(id, propsFor(*n, names));
-            return out;
-        });
-    o.registerMethod("GetProperty").onInterface(DBUSMENU).implementedAs([this](int32_t id, std::string name) {
-        if (const Node* n = find(id)) {
-            Props p = propsFor(*n, {name});
-            auto it = p.find(name);
-            if (it != p.end())
-                return it->second;
-        }
-        return sdbus::Variant(std::string());
-    });
-    o.registerMethod("Event").onInterface(DBUSMENU).implementedAs(
-        [this](int32_t id, std::string eventId, sdbus::Variant, uint32_t) {
-            if (eventId != "clicked")
-                return;
-            const Node* n = find(id);
-            if (!n || !n->item || !n->item->activate)
-                return;
-            auto fn = n->item->activate;   // the handler may rebuild the menu underneath us
-            fn();
-        });
-    o.registerMethod("EventGroup").onInterface(DBUSMENU).implementedAs(
-        [this](std::vector<sdbus::Struct<int32_t, std::string, sdbus::Variant, uint32_t>> events) {
-            std::vector<int32_t> errors;
-            for (auto& e : events) {
-                const Node* n = find(std::get<0>(e));
-                if (!n) {
-                    errors.push_back(std::get<0>(e));
-                    continue;
-                }
-                if (std::get<1>(e) == "clicked" && n->item && n->item->activate) {
-                    auto fn = n->item->activate;
-                    fn();
-                }
+        sdbus::registerMethod("GetLayout").implementedAs(
+            [this](int32_t parent, int32_t depth, std::vector<std::string> names) {
+                return std::tuple<uint32_t, Layout>(revision_, layoutFor(parent, depth, names));
+            }),
+        sdbus::registerMethod("GetGroupProperties").implementedAs(
+            [this](std::vector<int32_t> ids, std::vector<std::string> names) {
+                std::vector<sdbus::Struct<int32_t, Props>> out;
+                for (int32_t id : ids)
+                    if (const Node* n = find(id))
+                        out.emplace_back(id, propsFor(*n, names));
+                return out;
+            }),
+        sdbus::registerMethod("GetProperty").implementedAs([this](int32_t id, std::string name) {
+            if (const Node* n = find(id)) {
+                Props p = propsFor(*n, {name});
+                auto it = p.find(name);
+                if (it != p.end())
+                    return it->second;
             }
-            return errors;
-        });
-    o.registerMethod("AboutToShow").onInterface(DBUSMENU).implementedAs([](int32_t) { return false; });
-    o.registerMethod("AboutToShowGroup").onInterface(DBUSMENU).implementedAs([](std::vector<int32_t>) {
-        return std::tuple<std::vector<int32_t>, std::vector<int32_t>>{};
-    });
+            return sdbus::Variant(std::string());
+        }),
+        sdbus::registerMethod("Event").implementedAs(
+            [this](int32_t id, std::string eventId, sdbus::Variant, uint32_t) {
+                if (eventId != "clicked")
+                    return;
+                const Node* n = find(id);
+                if (!n || !n->item || !n->item->activate)
+                    return;
+                auto fn = n->item->activate;   // the handler may rebuild the menu underneath us
+                fn();
+            }),
+        sdbus::registerMethod("EventGroup").implementedAs(
+            [this](std::vector<sdbus::Struct<int32_t, std::string, sdbus::Variant, uint32_t>> events) {
+                std::vector<int32_t> errors;
+                for (auto& e : events) {
+                    const Node* n = find(std::get<0>(e));
+                    if (!n) {
+                        errors.push_back(std::get<0>(e));
+                        continue;
+                    }
+                    if (std::get<1>(e) == "clicked" && n->item && n->item->activate) {
+                        auto fn = n->item->activate;
+                        fn();
+                    }
+                }
+                return errors;
+            }),
+        sdbus::registerMethod("AboutToShow").implementedAs([](int32_t) { return false; }),
+        sdbus::registerMethod("AboutToShowGroup").implementedAs([](std::vector<int32_t>) {
+            return std::tuple<std::vector<int32_t>, std::vector<int32_t>>{};
+        }),
 
-    o.registerSignal("ItemsPropertiesUpdated").onInterface(DBUSMENU)
-        .withParameters<std::vector<sdbus::Struct<int32_t, Props>>, std::vector<sdbus::Struct<int32_t, std::vector<std::string>>>>();
-    o.registerSignal("LayoutUpdated").onInterface(DBUSMENU).withParameters<uint32_t, int32_t>();
-    o.registerSignal("ItemActivationRequested").onInterface(DBUSMENU).withParameters<int32_t, uint32_t>();
-    o.finishRegistration();
+        sdbus::registerSignal("ItemsPropertiesUpdated")
+            .withParameters<std::vector<sdbus::Struct<int32_t, Props>>, std::vector<sdbus::Struct<int32_t, std::vector<std::string>>>>(),
+        sdbus::registerSignal("LayoutUpdated").withParameters<uint32_t, int32_t>(),
+        sdbus::registerSignal("ItemActivationRequested").withParameters<int32_t, uint32_t>())
+        .forInterface(DBUSMENU);
 
     setMenu({});
 }

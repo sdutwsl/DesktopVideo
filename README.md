@@ -37,9 +37,13 @@ GNOME 用户请用 [Hanabi](https://github.com/jeffshee/gnome-ext-hanabi) 之类
 
 ### 构建
 
-Ubuntu 24.04 可以直接装 [Releases](https://github.com/sdutwsl/DesktopVideo/releases) 里的 `.deb`（`sudo apt install ./videowallpaper-*.deb`，依赖会自动装上）。
+现成的包在 [Releases](https://github.com/sdutwsl/DesktopVideo/releases)，依赖会自动装上：
 
-依赖：`libmpv`、`wayland-client`、`wayland-egl`、`egl`、`glesv2`、`sdbus-c++`、`wayland-scanner`、CMake ≥ 3.20、C++20 编译器。
+- Ubuntu 26.04 / Debian 13：`sudo apt install ./videowallpaper-*-ubuntu-26.04-amd64.deb`
+- Fedora 44：`sudo dnf install ./videowallpaper-*-fedora-44-x86_64.rpm`
+
+依赖：`libmpv`、`wayland-client`、`wayland-egl`、`egl`、`glesv2`、`sdbus-c++` ≥ 2.0、`wayland-scanner`、CMake ≥ 3.20、C++20 编译器。
+sdbus-c++ 2 的 API 和 1.x 不兼容，所以 Ubuntu 24.04（只有 1.4）不能直接构建。
 
 NixOS / 装了 Nix：
 
@@ -48,13 +52,22 @@ nix develop            # 进入带全部依赖的 shell
 cmake -S . -B build -G Ninja && ninja -C build
 ```
 
-Debian/Ubuntu：
+Ubuntu 26.04 / Debian 13：
 
 ```sh
 sudo apt install cmake ninja-build pkg-config libmpv-dev libwayland-dev libegl-dev libgles-dev libsdbus-c++-dev libwayland-bin g++
 cmake -S . -B build -G Ninja && ninja -C build
 sudo ninja -C build install   # 可选，装到 /usr/local
 ```
+
+Fedora：
+
+```sh
+sudo dnf install cmake ninja-build gcc-c++ pkgconf-pkg-config mpv-devel wayland-devel libglvnd-devel sdbus-cpp-devel
+cmake -S . -B build -G Ninja && ninja -C build
+```
+
+`cd build && cpack -G DEB`（或 `-G RPM`）可以自己打包。
 
 ### 使用
 
@@ -135,7 +148,7 @@ audio_monitor=DP-1             # 哪个显示器出声，留空用主屏
 git tag v2.1.0 && git push origin v2.1.0
 ```
 
-CI 跑完三路构建后自动创建 GitHub Release，附上 `videowallpaper-v2.1.0-windows-x64.zip`、`videowallpaper-v2.1.0-ubuntu-24.04-amd64.deb` 和 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v2.1.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
+CI 跑完全部构建后自动创建 GitHub Release，附上 `videowallpaper-v2.1.0-windows-x64.zip`、`videowallpaper-v2.1.0-ubuntu-26.04-amd64.deb`、`videowallpaper-v2.1.0-fedora-44-x86_64.rpm` 和 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v2.1.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
 
 ## 代码结构
 
@@ -145,7 +158,7 @@ src/wayland/    layer-shell 表面 + EGL 渲染、事件循环、SNI 托盘、D-
 src/win/        WorkerW 表面、Shell_NotifyIcon 托盘、锁屏检测
 cmake/          FindMpv、MinGW 工具链
 nix/            Nix 包、NixOS / home-manager 模块
-.github/        CI：Nix、Ubuntu apt（打 .deb）、MinGW 交叉三路构建，打 tag 时发布 release
+.github/        CI：Nix、Ubuntu 26.04（.deb）、Fedora 44（.rpm）、MinGW 交叉构建，打 tag 时发布 release
 Archived/       v1（C# WinForms 客户端 + C++ socket 服务端），仅存档
 ```
 

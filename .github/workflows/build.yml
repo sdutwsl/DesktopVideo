@@ -1,8 +1,8 @@
 name: build
 
-# Every push to master builds all three variants. Pushing a tag v<VERSION>, where
-# VERSION matches project() in CMakeLists.txt, additionally publishes a GitHub release
-# with the Windows zip and the Ubuntu .deb.
+# Every push to master builds every variant. Pushing a tag v<VERSION>, where VERSION
+# matches project() in CMakeLists.txt, additionally publishes a GitHub release with
+# the Windows zip, the Ubuntu .deb and the Fedora .rpm.
 on:
   push:
     branches: [master]
@@ -31,17 +31,22 @@ jobs:
       - name: Build
         run: nix build -L .#default
 
+  # The distro builds run in containers: sdbus-c++ 2 needs Ubuntu 26.04 / Fedora 44,
+  # whatever the hosted runner images happen to be.
   ubuntu:
-    name: Linux (Ubuntu apt + CMake)
-    runs-on: ubuntu-24.04
+    name: Linux (Ubuntu 26.04 .deb)
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
     steps:
-      - uses: actions/checkout@v4
       - name: Install dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            cmake ninja-build pkg-config g++ libmpv-dev libwayland-dev libwayland-bin \
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git cmake ninja-build pkg-config g++ libmpv-dev libwayland-dev libwayland-bin \
             libegl-dev libgles-dev libsdbus-c++-dev dpkg-dev file
+      - uses: actions/checkout@v4
       - name: Build
         run: |
           cmake -S . -B build -G Ninja
@@ -53,8 +58,33 @@ jobs:
           dpkg-deb --info ./*.deb
       - uses: actions/upload-artifact@v4
         with:
-          name: videowallpaper-ubuntu-24.04-amd64
+          name: videowallpaper-ubuntu-26.04-amd64
           path: build/*.deb
+
+  fedora:
+    name: Linux (Fedora 44 .rpm)
+    runs-on: ubuntu-latest
+    container: fedora:44
+    steps:
+      - name: Install dependencies
+        run: |
+          dnf install -y git cmake ninja-build gcc-c++ pkgconf-pkg-config \
+            mpv-devel wayland-devel libglvnd-devel sdbus-cpp-devel rpm-build
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja
+          ninja -C build
+      - name: Package .rpm
+        run: |
+          cd build
+          cpack -G RPM
+          rpm -qip ./*.rpm
+          rpm -qpR ./*.rpm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: videowallpaper-fedora-44-x86_64
+          path: build/*.rpm
 
   windows:
     name: Windows (MinGW cross from Nix)
@@ -85,7 +115,7 @@ jobs:
   release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [nix, ubuntu, windows]
+    needs: [nix, ubuntu, fedora, windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -107,8 +137,10 @@ jobs:
           mkdir -p assets
           (cd artifacts/videowallpaper-windows-x64 &&
             zip -9 "$GITHUB_WORKSPACE/assets/videowallpaper-${GITHUB_REF_NAME}-windows-x64.zip" videowallpaper.exe libmpv-2.dll)
-          cp artifacts/videowallpaper-ubuntu-24.04-amd64/*.deb \
-            "assets/videowallpaper-${GITHUB_REF_NAME}-ubuntu-24.04-amd64.deb"
+          cp artifacts/videowallpaper-ubuntu-26.04-amd64/*.deb \
+            "assets/videowallpaper-${GITHUB_REF_NAME}-ubuntu-26.04-amd64.deb"
+          cp artifacts/videowallpaper-fedora-44-x86_64/*.rpm \
+            "assets/videowallpaper-${GITHUB_REF_NAME}-fedora-44-x86_64.rpm"
           (cd assets && sha256sum -- * > SHA256SUMS)
           ls -l assets
       - name: Create release

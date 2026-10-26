@@ -9,7 +9,7 @@
   wayland,
   libglvnd,
   libffi,
-  sdbus-cpp,
+  sdbus-cpp_2,
   systemdLibs,
 }:
 
@@ -44,7 +44,7 @@ stdenv.mkDerivation {
     wayland
     libglvnd # EGL + GLESv2
     libffi # wayland-client.pc depends on it
-    sdbus-cpp
+    sdbus-cpp_2
     systemdLibs # sd-bus, required by sdbus-cpp
   ];
 
