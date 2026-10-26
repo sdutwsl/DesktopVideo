@@ -6,24 +6,73 @@
 #include "Session.h"
 #include "Tray.h"
 #include "WaylandDisplay.h"
+#include "core/AppControl.h"
 #include "core/Config.h"
 #include "core/Menu.h"
 #include "core/Wallpaper.h"
 
 #include <signal.h>
 #include <sys/signalfd.h>
+#include <sys/wait.h>
 #include <unistd.h>
+#include <spawn.h>
 
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace muralop;
+extern char** environ;
 
 namespace {
+
+std::string uiCommand()
+{
+    std::error_code error;
+    const auto executable = std::filesystem::read_symlink("/proc/self/exe", error);
+    const auto sibling = executable.parent_path() / "muralop-ui";
+    if (!error && access(sibling.c_str(), X_OK) == 0) return sibling.string();
+    const char* path = getenv("PATH");
+    if (!path) return {};
+    std::string search(path);
+    for (size_t start = 0; start <= search.size();) {
+        const size_t end = search.find(':', start);
+        const auto directory = search.substr(start, end == std::string::npos ? end : end - start);
+        const auto candidate = std::filesystem::path(directory.empty() ? "." : directory) / "muralop-ui";
+        if (access(candidate.c_str(), X_OK) == 0) return "muralop-ui";
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    return {};
+}
+
+bool showMainWindow()
+{
+    std::string command = uiCommand();
+    if (command.empty()) {
+        fputs("[ui] muralop-ui is not installed; see README for GUI setup\n", stderr);
+        return false;
+    }
+    char* argv[] = {command.data(), nullptr};
+    pid_t pid = 0;
+    if (posix_spawnp(&pid, command.c_str(), nullptr, nullptr, argv, environ) != 0) {
+        fputs("[ui] muralop-ui is not installed; see README for GUI setup\n", stderr);
+        return false;
+    }
+    std::thread([pid] { while (waitpid(pid, nullptr, 0) < 0 && errno == EINTR) {} }).detach();
+    return true;
+}
+
+std::string videoSource(const std::string& value)
+{
+    if (value.starts_with("https://") || value.starts_with("http://")) return value;
+    return std::filesystem::absolute(value).string();
+}
 
 void usage()
 {
@@ -33,6 +82,7 @@ void usage()
           "  FILE                  use FILE as the wallpaper video (starts the daemon if needed)\n"
           "  set FILE [MONITOR]    set the video, optionally for one monitor only\n"
           "  choose [MONITOR]      open a file dialog\n"
+          "  ui                    open the YouTube control window\n"
           "  pause | resume        pause / resume playback\n"
           "  mute | unmute\n"
           "  volume N              0..100\n"
@@ -61,7 +111,7 @@ int forward(sdbus::IConnection& bus, const std::vector<std::string>& args)
             fputs("muralop is already running\n", stderr);
             return 1;
         } else if (cmd == "set" && args.size() >= 2) {
-            call("SetVideo", std::filesystem::absolute(args[1]).string(), args.size() > 2 ? args[2] : "");
+            call("SetVideo", videoSource(args[1]), args.size() > 2 ? args[2] : "");
         } else if (cmd == "choose") {
             call("ChooseVideo", args.size() > 1 ? args[1] : "");
         } else if (cmd == "pause" || cmd == "resume") {
@@ -77,8 +127,8 @@ int forward(sdbus::IConnection& bus, const std::vector<std::string>& args)
                 puts(n.c_str());
         } else if (cmd == "quit") {
             call("Quit");
-        } else if (std::filesystem::is_regular_file(cmd)) {
-            call("SetVideo", std::filesystem::absolute(cmd).string(), std::string());
+        } else if (cmd.starts_with("https://") || cmd.starts_with("http://") || std::filesystem::is_regular_file(cmd)) {
+            call("SetVideo", videoSource(cmd), std::string());
         } else {
             usage();
             return 2;
@@ -147,6 +197,10 @@ int main(int argc, char** argv)
         else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
             usage();
             return 0;
+        } else if (!strcmp(argv[i], "--background")) {
+            // The GUI starts the backend as a separate process.
+        } else if (!strcmp(argv[i], "ui")) {
+            return showMainWindow() ? 0 : 1;
         } else
             args.push_back(argv[i]);
     }
@@ -168,9 +222,9 @@ int main(int argc, char** argv)
     if (!args.empty()) {
         const std::string& cmd = args[0];
         if (cmd == "set" && args.size() >= 2 && args.size() == 2)
-            initialVideo = std::filesystem::absolute(args[1]).string();
-        else if (std::filesystem::is_regular_file(cmd))
-            initialVideo = std::filesystem::absolute(cmd).string();
+            initialVideo = videoSource(args[1]);
+        else if (cmd.starts_with("https://") || cmd.starts_with("http://") || std::filesystem::is_regular_file(cmd))
+            initialVideo = videoSource(cmd);
         else {
             fputs("muralop: daemon is not running\n", stderr);
             return 1;
@@ -210,6 +264,7 @@ int main(int argc, char** argv)
     MenuActions actions;
     std::function<void()> rebuildMenu;
     actions.quit = [&] { loop.quit(); };
+    if (!uiCommand().empty()) actions.showMainWindow = [] { showMainWindow(); };
     actions.chooseVideo = [&](const std::string& monitor) {
         chooser.open(monitor.empty() ? "选择壁纸视频" : "选择 " + monitor + " 的壁纸视频", [&, monitor](std::string path) {
             if (!path.empty())
@@ -241,6 +296,7 @@ int main(int argc, char** argv)
     sessionMonitor.onSleep = [&](bool sleeping) { wallpaper.setSuspended(sleeping); };
     sessionMonitor.onShutdown = [&] { loop.quit(); };
 
+    AppControl appControl(wallpaper, config, [&] { loop.quit(); });
     Control control(*session, {
         [&](std::string path, std::string monitor) { wallpaper.setVideo(path, monitor); rebuildMenu(); },
         [&](std::string monitor) { actions.chooseVideo(monitor); },
@@ -254,7 +310,7 @@ int main(int argc, char** argv)
                 names.push_back(m.id);
             return names;
         },
-    });
+    }, appControl);
 
     SignalSource signals([&] { loop.quit(); });
     loop.add(&signals);

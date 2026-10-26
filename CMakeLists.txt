@@ -12,6 +12,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+include(CTest)
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
@@ -25,6 +27,7 @@ find_package(Mpv REQUIRED)
 
 # ---- shared core -------------------------------------------------------------
 add_library(muralop_core STATIC
+    src/core/AppControl.cpp
     src/core/Config.cpp
     src/core/Menu.cpp
     src/core/MpvPlayer.cpp
@@ -34,11 +37,33 @@ target_include_directories(muralop_core PUBLIC src)
 target_link_libraries(muralop_core PUBLIC Mpv::Mpv)
 target_compile_options(muralop_core PUBLIC -Wall -Wextra)
 
+if(BUILD_TESTING AND NOT APPLE)
+    add_executable(muralop_control_test
+        tests/control_test.cpp tests/FakeMpv.cpp
+        src/core/Config.cpp src/core/Wallpaper.cpp src/core/AppControl.cpp)
+    target_include_directories(muralop_control_test PRIVATE src)
+    target_compile_options(muralop_control_test PRIVATE -Wall -Wextra -UNDEBUG)
+    if(WIN32)
+        target_sources(muralop_control_test PRIVATE src/win/ControlPipe.cpp)
+        target_compile_definitions(muralop_control_test PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+        target_link_libraries(muralop_control_test PRIVATE user32 advapi32)
+    endif()
+    add_test(NAME controller COMMAND muralop_control_test)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(muralop_mpv_options_test tests/mpv_options_test.cpp)
+    target_link_libraries(muralop_mpv_options_test PRIVATE muralop_core)
+    target_compile_options(muralop_mpv_options_test PRIVATE -UNDEBUG)
+    add_test(NAME mpv-options COMMAND muralop_mpv_options_test)
+endif()
+
 # ---- Windows: WorkerW + Shell_NotifyIcon ---------------------------------------
 if(WIN32)
     add_executable(muralop WIN32
         src/win/main.cpp
         src/win/DesktopSurface.cpp
+        src/win/ControlPipe.cpp
         src/win/Muralop.rc
     )
     # Version.h feeds the version resource in Muralop.rc.
@@ -48,7 +73,7 @@ if(WIN32)
 " @ONLY)
     target_include_directories(muralop PRIVATE src/win "${CMAKE_CURRENT_BINARY_DIR}")
     target_compile_definitions(muralop PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
-    target_link_libraries(muralop PRIVATE muralop_core user32 gdi32 shell32 comdlg32 wtsapi32 ole32)
+    target_link_libraries(muralop PRIVATE muralop_core user32 gdi32 shell32 comdlg32 wtsapi32 ole32 advapi32)
     target_link_options(muralop PRIVATE -municode)   # wWinMain entry point
 
     # libmpv is a single DLL; put it next to the exe.
@@ -128,6 +153,10 @@ else()
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(WAYLAND REQUIRED IMPORTED_TARGET wayland-client wayland-egl egl glesv2)
     pkg_check_modules(SDBUS REQUIRED IMPORTED_TARGET sdbus-c++>=2.0)
+    if(BUILD_TESTING)
+        target_sources(muralop_control_test PRIVATE src/wayland/Session.cpp)
+        target_link_libraries(muralop_control_test PRIVATE PkgConfig::SDBUS)
+    endif()
     pkg_get_variable(WAYLAND_SCANNER wayland-scanner wayland_scanner)
     if(NOT WAYLAND_SCANNER)
         find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)

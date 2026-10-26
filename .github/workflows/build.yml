@@ -2,8 +2,8 @@ name: build
 
 # Every push to master builds every variant. Pushing a tag v<VERSION>, where VERSION
 # matches project() in CMakeLists.txt, additionally publishes a GitHub release with the
-# Windows installers and portable zips (x64, ARM64), the Ubuntu .deb and Fedora .rpm
-# (x86_64, aarch64) and the macOS .dmg (Apple Silicon). Each build job names its files
+# Windows installers and portable zips (x64, ARM64), a GUI bundle (Windows/Linux x64),
+# the Ubuntu .deb and Fedora .rpm (x86_64, aarch64) and the macOS .dmg (Apple Silicon). Each build job names its files
 # muralop-v<VERSION>-..., so the release job only has to collect them.
 on:
   push:
@@ -61,6 +61,7 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja
           ninja -C build
+          ctest --test-dir build --output-on-failure
       - name: Package .deb
         run: |
           cd build
@@ -94,6 +95,7 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja
           ninja -C build
+          ctest --test-dir build --output-on-failure
       - name: Package .rpm
         run: |
           cd build
@@ -143,6 +145,15 @@ jobs:
           nix develop ".#$SHELL_NAME" -c cmake -S . -B build-win -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" -DMPV_SDK_DIR="$RUNNER_TEMP/mpv-sdk"
           nix develop ".#$SHELL_NAME" -c ninja -C build-win
+      - name: Export GUI backend and control host
+        if: matrix.arch == 'x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-backend-x64
+          path: |
+            build-win/muralop.exe
+            build-win/libmpv-2.dll
+            build-win/muralop_control_test.exe
       - name: Package installer and portable zip
         run: |
           nix develop ".#$SHELL_NAME" -c ninja -C build-win installer portable
@@ -153,6 +164,87 @@ jobs:
           path: |
             build-win/muralop-v*-setup.exe
             build-win/muralop-v*-portable.zip
+
+  gui:
+    name: GUI (${{ matrix.os }})
+    needs: [ubuntu, windows]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install GUI build dependencies
+        run: python -m pip install -r gui/requirements.txt pyinstaller pytest
+      - name: Prepare private Linux Qt runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p qt-runtime
+          cd qt-runtime
+          mkdir -p apt-state/lists/partial apt-cache/archives/partial
+          apt-get -o Dir::State::lists="$PWD/apt-state/lists" -o Dir::Cache="$PWD/apt-cache" update
+          apt-get -o Dir::State::lists="$PWD/apt-state/lists" -o Dir::Cache="$PWD/apt-cache" download \
+            libegl1 libgl1 libglvnd0 libglx0 libxcb-cursor0 libxkbcommon-x11-0 libnss3 libasound2t64
+          for deb in ./*.deb; do dpkg-deb -x "$deb" .; done
+          echo "LD_LIBRARY_PATH=$PWD/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+      - name: Download Windows backend
+        if: runner.os == 'Windows'
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-backend-x64
+          path: backend
+      - name: Test Windows IPC and GUI
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:MURALOP_CONTROL_TEST = "$pwd/backend/muralop_control_test.exe"
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          python -m pytest tests -q
+          python gui/main.py --smoke-test gui-preview.png
+      - name: Download Ubuntu backend
+        if: runner.os == 'Linux'
+        uses: actions/download-artifact@v4
+        with:
+          name: ubuntu-26.04-amd64
+          path: backend-deb
+      - name: Extract Ubuntu backend
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p backend-extract backend
+          dpkg-deb -x backend-deb/*.deb backend-extract
+          cp backend-extract/usr/bin/muralop backend/
+      - name: Test Linux GUI
+        if: runner.os == 'Linux'
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QTWEBENGINE_DISABLE_SANDBOX: '1'
+          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
+        run: |
+          python -m pytest tests -vv -s
+          python gui/main.py --smoke-test gui-preview.png
+      - name: Package GUI, yt-dlp and Deno
+        env:
+          QTWEBENGINE_DISABLE_SANDBOX: ${{ runner.os == 'Linux' && '1' || '' }}
+          QTWEBENGINE_CHROMIUM_FLAGS: ${{ runner.os == 'Linux' && '--disable-gpu' || '' }}
+        run: python gui/package.py --backend-dir backend
+      - name: Archive GUI bundle
+        shell: bash
+        run: |
+          version=$(sed -n 's/^project(Muralop VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          mkdir -p assets
+          if [ "$RUNNER_OS" = Windows ]; then
+            python -c "import shutil; shutil.make_archive('assets/muralop-v${version}-windows-x64-gui', 'zip', root_dir='dist/gui', base_dir='muralop-ui')"
+          else
+            tar -czf "assets/muralop-v${version}-linux-gui-x64.tar.gz" -C dist/gui muralop-ui
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gui-${{ runner.os }}-x64
+          path: assets/muralop-v*
 
   macos:
     name: macOS arm64 (.dmg)
@@ -167,6 +259,7 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja
           ninja -C build
+          ctest --test-dir build --output-on-failure
       - name: Package .dmg
         run: |
           ninja -C build dmg
@@ -201,7 +294,7 @@ jobs:
   release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [nix, ubuntu, fedora, windows, macos]
+    needs: [nix, ubuntu, fedora, windows, gui, macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -222,6 +315,7 @@ jobs:
       - name: Checksums
         run: |
           cd assets
+          rm -f muralop.exe libmpv-2.dll muralop_control_test.exe
           sha256sum -- * > SHA256SUMS
           ls -l
       - name: Create release

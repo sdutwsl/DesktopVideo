@@ -20,6 +20,7 @@ v2.2.0 及更早版本仍使用 VideoWallpaper 名称；Muralop 从 v3.0.0 起�
 - 循环播放、按屏幕比例裁切铺满
 - 锁屏、休眠时暂停，关机前退出
 - 托盘 / 菜单栏菜单：选择视频、暂停、静音、退出；Linux 另有命令行 / D-Bus 控制，macOS 菜单里可以设置登录时启动
+- Linux 和 Windows x64 可选主界面：内嵌 YouTube 浏览、网址播放、显示器选择和登录会话导入
 - 配置持久化（`key=value` 文本文件）
 
 ## Linux（Wayland）
@@ -78,6 +79,7 @@ cmake -S . -B build -G Ninja && ninja -C build
 muralop                    # 启动守护进程（托盘里选视频）
 muralop ~/Videos/a.mp4     # 启动并使用该视频
 muralop set a.mp4 DP-2     # 只给 DP-2 换视频
+muralop ui                 # 打开已安装的主界面
 muralop pause | resume | mute | unmute | volume 40 | monitors | quit
 MURALOP_DEBUG=1 muralop         # 打印渲染和 mpv 的详细日志
 ```
@@ -117,10 +119,17 @@ v3.0.0 起，[Releases](https://github.com/sdutwsl/Muralop/releases) 里每个�
 
 - **安装包** `muralop-v*-windows-<arch>-setup.exe`：装到 `%LOCALAPPDATA%\Programs\Muralop`，不需要管理员权限；有开始菜单快捷方式，可选开机自启，可在“设置 → 应用”里卸载。安装和卸载前会让正在运行的壁纸先正常退出。
 - **便携版** `muralop-v*-windows-<arch>-portable.zip`：解压出 `Muralop` 文件夹直接运行。文件夹里的 `config.ini` 让设置保存在它旁边，不写 `%APPDATA%`，也不碰注册表；删掉它就改用 `%APPDATA%\Muralop\config.ini`。
+- **YouTube 主界面** `muralop-v*-windows-x64-gui.zip`：解压后运行 `muralop-ui.exe`；包含 x64 后端、libmpv、yt-dlp 和 Deno。ARM64 主界面尚未打包。
 
 master 每次提交的构建在 [Actions](https://github.com/sdutwsl/Muralop/actions/workflows/build.yml) 的 `windows-x64` / `windows-arm64` 产物里。安装包没有代码签名，第一次运行 SmartScreen 会提示，点“更多信息 → 仍要运行”。
 
 运行后右键托盘图标选择视频；把视频文件拖到 exe 上也可以。
+
+## YouTube 主界面（Linux / Windows x64）
+
+Linux 可通过 Nix 包中的 `muralop-ui` 启动；也可在 Ubuntu 26.04 下载 `muralop-v*-linux-gui-x64.tar.gz`，解压后运行 `muralop-ui/muralop-ui`。Linux GUI 归档内的后端依赖 Ubuntu 26.04 的 libmpv、Wayland、EGL 和 sdbus-c++ 2；Nix 包会管理这些依赖。Windows 使用上文的 GUI zip。主界面关闭后壁纸继续运行，托盘菜单可以再次打开它。
+
+在内嵌网页浏览 YouTube，点击视频可直接设为桌面壁纸；也可以粘贴视频网址，给不同显示器指定不同视频。登录会话可从浏览器或 `cookies.txt` 导入。具体操作、Cookie 保存位置和开发运行方式见 [GUI 说明](gui/README.md)。macOS 目前没有这个主界面。
 
 ### 构建
 
@@ -180,7 +189,7 @@ audio_monitor=DP-1             # 哪个显示器出声，留空用主屏
 git tag v3.0.0 && git push origin v3.0.0
 ```
 
-CI 跑完全部构建后自动创建 GitHub Release，附上 Windows x64 / ARM64 的安装包和便携 zip、Ubuntu 26.04 的 amd64 / arm64 `.deb`、Fedora 44 的 x86_64 / aarch64 `.rpm`、macOS Apple Silicon 的 `.dmg`，以及 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v3.0.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
+CI 跑完全部构建后自动创建 GitHub Release，附上 Windows x64 / ARM64 的安装包和便携 zip、Windows/Linux x64 的 GUI 包、Ubuntu 26.04 的 amd64 / arm64 `.deb`、Fedora 44 的 x86_64 / aarch64 `.rpm`、macOS Apple Silicon 的 `.dmg`，以及 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v3.0.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
 
 ## 代码结构
 
