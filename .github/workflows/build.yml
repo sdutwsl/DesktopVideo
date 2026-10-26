@@ -2,9 +2,9 @@ name: build
 
 # Every push to master builds every variant. Pushing a tag v<VERSION>, where VERSION
 # matches project() in CMakeLists.txt, additionally publishes a GitHub release with the
-# Windows installers and portable zips (x64, ARM64) and the Ubuntu .deb and Fedora .rpm
-# (x86_64, aarch64). Each build job names its files videowallpaper-v<VERSION>-..., so the
-# release job only has to collect them.
+# Windows installers and portable zips (x64, ARM64), the Ubuntu .deb and Fedora .rpm
+# (x86_64, aarch64) and the macOS .dmg (Apple Silicon). Each build job names its files
+# videowallpaper-v<VERSION>-..., so the release job only has to collect them.
 on:
   push:
     branches: [master]
@@ -154,10 +154,54 @@ jobs:
             build-win/videowallpaper-v*-setup.exe
             build-win/videowallpaper-v*-portable.zip
 
+  macos:
+    name: macOS arm64 (.dmg)
+    # libmpv and its libraries come from Homebrew, which only builds Apple Silicon
+    # bottles now; the dmg needs the macOS version of this runner image or later.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: brew install mpv dylibbundler ninja pkgconf
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja
+          ninja -C build
+      - name: Package .dmg
+        run: |
+          ninja -C build dmg
+          ls -l build/videowallpaper-v*.dmg
+      - name: Smoke test the packaged app
+        run: |
+          mnt=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" build/videowallpaper-v*.dmg
+          cp -R "$mnt/VideoWallpaper.app" "$RUNNER_TEMP/"
+          hdiutil detach "$mnt"
+          app="$RUNNER_TEMP/VideoWallpaper.app"
+          plutil -p "$app/Contents/Info.plist"
+          ffmpeg -v error -f lavfi -i testsrc2=size=1920x1080:rate=30 -t 10 -pix_fmt yuv420p "$RUNNER_TEMP/test.mp4"
+          conf="$HOME/Library/Application Support/VideoWallpaper"
+          mkdir -p "$conf"
+          printf 'video=%s\n' "$RUNNER_TEMP/test.mp4" > "$conf/config.ini"
+          # Still running after 10 s and has drawn video: the bundled libraries load and
+          # the desktop window renders (with Apple's software renderer on these VMs).
+          VW_DEBUG=1 "$app/Contents/MacOS/VideoWallpaper" > "$RUNNER_TEMP/smoke.log" 2>&1 &
+          pid=$!
+          sleep 10
+          alive=yes
+          kill -0 "$pid" 2> /dev/null || alive=no
+          kill "$pid" 2> /dev/null || true
+          cat "$RUNNER_TEMP/smoke.log"
+          [ "$alive" = yes ] && grep -q 'frames drawn' "$RUNNER_TEMP/smoke.log"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: build/videowallpaper-v*.dmg
+
   release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [nix, ubuntu, fedora, windows]
+    needs: [nix, ubuntu, fedora, windows, macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write

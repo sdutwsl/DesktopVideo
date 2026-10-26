@@ -1,4 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
+# Our own code needs macOS 13 (SMAppService); `ninja dmg` raises the app's minimum to
+# whatever the bundled Homebrew libraries were built for.
+if(CMAKE_HOST_APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET 13.0 CACHE STRING "Minimum macOS version")
+endif()
 # The single version number: the Nix package reads it from here, and release tags must be v<VERSION>.
 project(VideoWallpaper VERSION 2.1.0 LANGUAGES C CXX)
 
@@ -87,6 +92,36 @@ if(WIN32)
                 VERBATIM)
         endif()
     endif()
+
+# ---- macOS: desktop-level windows + NSStatusItem -------------------------------------
+elseif(APPLE)
+    enable_language(OBJCXX)
+    add_executable(videowallpaper MACOSX_BUNDLE
+        src/mac/main.mm
+        src/mac/DesktopSurface.mm
+        src/mac/VideoWallpaper.icns
+    )
+    set_source_files_properties(src/mac/VideoWallpaper.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    configure_file(src/mac/Info.plist.in "${CMAKE_CURRENT_BINARY_DIR}/Info.plist" @ONLY)
+    set_target_properties(videowallpaper PROPERTIES
+        OUTPUT_NAME VideoWallpaper
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist")
+    target_include_directories(videowallpaper PRIVATE src/mac)
+    target_compile_options(videowallpaper PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
+    target_compile_definitions(videowallpaper PRIVATE GL_SILENCE_DEPRECATION)
+    target_link_libraries(videowallpaper PRIVATE vw_core
+        "-framework Cocoa" "-framework QuartzCore" "-framework OpenGL"
+        "-framework ServiceManagement" "-framework UniformTypeIdentifiers")
+
+    # Release package: `ninja dmg` (needs dylibbundler, e.g. from Homebrew).
+    get_filename_component(VW_MPV_LIBDIR "${Mpv_LIBRARY}" DIRECTORY)
+    set(VW_DMG "${CMAKE_CURRENT_BINARY_DIR}/videowallpaper-v${PROJECT_VERSION}-macos-${CMAKE_SYSTEM_PROCESSOR}.dmg")
+    add_custom_target(dmg
+        COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/src/mac/make-dmg.sh"
+                "$<TARGET_BUNDLE_DIR:videowallpaper>" "${VW_DMG}" "${VW_MPV_LIBDIR}"
+        DEPENDS videowallpaper
+        COMMENT "Packing ${VW_DMG}"
+        VERBATIM)
 
 # ---- Linux: Wayland layer-shell + StatusNotifierItem -------------------------------
 else()

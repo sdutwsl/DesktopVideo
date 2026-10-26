@@ -2,21 +2,22 @@
 
 [![build](https://github.com/sdutwsl/DesktopVideo/actions/workflows/build.yml/badge.svg)](https://github.com/sdutwsl/DesktopVideo/actions/workflows/build.yml)
 
-把视频当作桌面壁纸播放。一套 C++ 核心（libmpv），两个原生外壳：
+把视频当作桌面壁纸播放。一套 C++ 核心（libmpv），三个原生外壳：
 
 | 平台 | 壁纸层 | 托盘 | 状态 |
 |---|---|---|---|
 | **Linux Wayland** | `wlr-layer-shell` background 层 + 自绘（EGL/GLES2） | StatusNotifierItem（D-Bus） | KDE Plasma 6 上验证通过 |
 | **Windows** | Explorer 的 `WorkerW`（桌面图标之下） | `Shell_NotifyIcon` | 从 v1 移植，x64 / ARM64 构建由 CI 覆盖，尚未在真机验证 |
+| **macOS** | 桌面层级的无边框窗口（Finder 图标之下）+ CAOpenGLLayer | 菜单栏 `NSStatusItem` | Apple Silicon，CI 的 macOS 虚拟机里冒烟测试通过，尚未在真机验证 |
 
-A video wallpaper player: shared libmpv core, native shells for Wayland (layer-shell) and Windows (WorkerW).
+A video wallpaper player: shared libmpv core, native shells for Wayland (layer-shell), Windows (WorkerW) and macOS (desktop-level windows).
 
 ## 功能
 
 - 多显示器：每个显示器一个播放器，可分别指定视频；只有主屏出声
 - 循环播放、按屏幕比例裁切铺满
 - 锁屏、休眠时暂停，关机前退出
-- 托盘菜单：选择视频、暂停、静音、退出；Linux 另有命令行 / D-Bus 控制
+- 托盘 / 菜单栏菜单：选择视频、暂停、静音、退出；Linux 另有命令行 / D-Bus 控制，macOS 菜单里可以设置登录时启动
 - 配置持久化（`key=value` 文本文件）
 
 ## Linux（Wayland）
@@ -132,13 +133,34 @@ master 每次提交的构建在 [Actions](https://github.com/sdutwsl/DesktopVide
    ninja -C build-win installer portable    # videowallpaper-v<版本>-windows-<arch>-setup.exe / -portable.zip
    ```
 
+## macOS
+
+[Releases](https://github.com/sdutwsl/DesktopVideo/releases) 里的 `videowallpaper-v*-macos-arm64.dmg`：Apple Silicon（M 系列芯片），macOS 15 及以上。
+没有 Intel 版：Homebrew 已经不给 Intel Mac 出 mpv 的预编译包。
+
+打开 dmg，把 `VideoWallpaper` 拖进“应用程序”。这个包没有 Apple 开发者签名和公证，第一次打开会提示无法验证开发者：点“完成”，再到“系统设置 → 隐私与安全性”底部点“仍要打开”。
+也可以在终端里去掉下载标记：`xattr -dr com.apple.quarantine /Applications/VideoWallpaper.app`。
+
+它只在菜单栏显示一个图标（不进 Dock），点开选择视频、暂停、静音、登录时启动、退出。把视频拖到程序图标上，或在 Finder 里“打开方式 → VideoWallpaper”，也会设为壁纸。
+锁屏、切换用户、睡眠和显示器关闭时暂停。
+
+### 构建
+
+```sh
+brew install cmake ninja pkgconf mpv dylibbundler
+cmake -S . -B build -G Ninja && ninja -C build   # build/VideoWallpaper.app，依赖 Homebrew 里的 libmpv
+ninja -C build dmg                                # videowallpaper-v<版本>-macos-arm64.dmg，带上 libmpv 和它依赖的全部库
+```
+
+`ninja dmg` 用 dylibbundler 把 libmpv 及其依赖（ffmpeg、libass、libplacebo 等）复制进 `Contents/Frameworks`，检查没有残留指向 Homebrew 的路径，按这些库要求的系统版本设置 `LSMinimumSystemVersion`，再做 ad-hoc 签名。
+
 ## 配置文件
 
-Linux：`~/.config/videowallpaper/config.ini`；Windows：`%APPDATA%\VideoWallpaper\config.ini`。
+Linux：`~/.config/videowallpaper/config.ini`；Windows：`%APPDATA%\VideoWallpaper\config.ini`；macOS：`~/Library/Application Support/VideoWallpaper/config.ini`。
 
 ```ini
 video=/path/default.mp4        # 默认视频
-video.DP-2=/path/other.mp4     # 某个显示器的覆盖（Windows 里显示器名形如 \\.\DISPLAY1）
+video.DP-2=/path/other.mp4     # 某个显示器的覆盖（Windows 里显示器名形如 \\.\DISPLAY1，macOS 里是显示器的名字）
 volume=50
 mute=0
 pause_when_locked=1
@@ -154,7 +176,7 @@ audio_monitor=DP-1             # 哪个显示器出声，留空用主屏
 git tag v2.1.0 && git push origin v2.1.0
 ```
 
-CI 跑完全部构建后自动创建 GitHub Release，附上 Windows x64 / ARM64 的安装包和便携 zip、Ubuntu 26.04 的 amd64 / arm64 `.deb`、Fedora 44 的 x86_64 / aarch64 `.rpm`，以及 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v2.1.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
+CI 跑完全部构建后自动创建 GitHub Release，附上 Windows x64 / ARM64 的安装包和便携 zip、Ubuntu 26.04 的 amd64 / arm64 `.deb`、Fedora 44 的 x86_64 / aarch64 `.rpm`、macOS Apple Silicon 的 `.dmg`，以及 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v2.1.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
 
 ## 代码结构
 
@@ -162,12 +184,14 @@ CI 跑完全部构建后自动创建 GitHub Release，附上 Windows x64 / ARM64
 src/core/       平台无关：libmpv 封装、配置、多屏控制器、菜单模型
 src/wayland/    layer-shell 表面 + EGL 渲染、事件循环、SNI 托盘、D-Bus 会话事件
 src/win/        WorkerW 表面、Shell_NotifyIcon 托盘、锁屏检测、NSIS 安装脚本
+src/mac/        桌面层窗口 + CAOpenGLLayer、菜单栏图标、系统事件、Info.plist 和 dmg 打包脚本
 cmake/          FindMpv、MinGW 工具链（x86_64 / aarch64）
 nix/            Nix 包、NixOS / home-manager 模块
-.github/        CI：Nix、Ubuntu 26.04（.deb）、Fedora 44（.rpm）各在 x86_64 和 aarch64 上构建，Windows x64 / ARM64 交叉构建，打 tag 时发布 release
+.github/        CI：Nix、Ubuntu 26.04（.deb）、Fedora 44（.rpm）各在 x86_64 和 aarch64 上构建，Windows x64 / ARM64 交叉构建，macOS arm64 构建 + 冒烟测试，打 tag 时发布 release
 Archived/       v1（C# WinForms 客户端 + C++ socket 服务端），仅存档
 ```
 
 核心通过两个接口和平台打交道：`Platform`（枚举显示器、创建表面）和 `Surface`（把播放器的输出接到一块屏幕上）。
-Windows 上 mpv 直接渲染进壁纸窗口（`wid`）；Wayland 上用 mpv 的 render API 画到我们自己的 EGL 表面，传入 `wl_display` 后 VAAPI 硬解的帧可以直接交给 GL。
+Windows 上 mpv 直接渲染进壁纸窗口（`wid`）；Wayland 上用 mpv 的 render API 画到我们自己的 EGL 表面，传入 `wl_display` 后 VAAPI 硬解的帧可以直接交给 GL；
+macOS 上同样用 render API，在主线程里画进每块屏幕一个的 CAOpenGLLayer，VideoToolbox 硬解。
 循环播放、裁切铺满用的是 mpv 选项（`loop-file=inf`、`panscan=1.0`），不读用户的 `mpv.conf`。
