@@ -173,10 +173,10 @@ audio_monitor=DP-1             # 哪个显示器出声，留空用主屏
 
 ```sh
 # 先改 CMakeLists.txt 里的版本号并提交
-git tag v2.1.0 && git push origin v2.1.0
+git tag v2.2.0 && git push origin v2.2.0
 ```
 
-CI 跑完全部构建后自动创建 GitHub Release，附上 Windows x64 / ARM64 的安装包和便携 zip、Ubuntu 26.04 的 amd64 / arm64 `.deb`、Fedora 44 的 x86_64 / aarch64 `.rpm`、macOS Apple Silicon 的 `.dmg`，以及 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v2.1.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
+CI 跑完全部构建后自动创建 GitHub Release，附上 Windows x64 / ARM64 的安装包和便携 zip、Ubuntu 26.04 的 amd64 / arm64 `.deb`、Fedora 44 的 x86_64 / aarch64 `.rpm`、macOS Apple Silicon 的 `.dmg`，以及 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v2.2.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
 
 ## 代码结构
 

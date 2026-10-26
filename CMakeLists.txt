@@ -5,7 +5,7 @@ if(CMAKE_HOST_APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET 13.0 CACHE STRING "Minimum macOS version")
 endif()
 # The single version number: the Nix package reads it from here, and release tags must be v<VERSION>.
-project(VideoWallpaper VERSION 2.1.0 LANGUAGES C CXX)
+project(VideoWallpaper VERSION 2.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
