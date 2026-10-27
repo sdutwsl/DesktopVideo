@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { youtubeVideo, exportCookies, resolveMedia } = require('../media.cjs');
+const { youtubeVideo, electronCookie, exportCookies, resolveMedia } = require('../media.cjs');
 
 test('navigation accepts only actual YouTube video addresses', () => {
   assert.equal(youtubeVideo('https://youtu.be/abcdefghijk?t=5'), 'https://www.youtube.com/watch?v=abcdefghijk');
@@ -47,4 +47,17 @@ test('extractor failures become actionable messages', async () => {
     { message: '解析失败：Video unavailable' });
   const abort = Object.assign(new Error('操作已取消'), { name: 'AbortError' });
   await assert.rejects(resolveMedia({ run: async () => { throw abort; } }, 'x', 'https://example.com/v'), { name: 'AbortError' });
+});
+
+test('imported cookies follow Chromium prefix rules', () => {
+  const hostOnly = electronCookie({ name: '__Host-GAPS', value: 'v', domain: 'accounts.google.com', path: '/a', secure: false, expires: 2e9 });
+  assert.equal(hostOnly.domain, undefined);
+  assert.equal(hostOnly.path, '/');
+  assert.equal(hostOnly.secure, true);
+  assert.equal(hostOnly.url, 'https://accounts.google.com/');
+  const secure = electronCookie({ name: '__Secure-3PSID', value: 'v', domain: '.youtube.com', path: '/', secure: true, http_only: true });
+  assert.equal(secure.domain, '.youtube.com');
+  assert.equal(secure.httpOnly, true);
+  assert.equal(electronCookie({ name: '__Host-x', value: 'v', domain: '.youtube.com' }), null);
+  assert.equal(electronCookie({ name: 'SID', value: 'v', domain: '.example.com' }), null);
 });

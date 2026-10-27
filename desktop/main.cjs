@@ -6,7 +6,7 @@ const { pathToFileURL } = require('node:url');
 const { Processes, safeError } = require('./processes.cjs');
 const { PlayerPlugin } = require('./player.cjs');
 const { Playback } = require('./playback.cjs');
-const { youtubeVideo, httpUrl, sessionDomain, exportCookies, resolveMedia } = require('./media.cjs');
+const { youtubeVideo, httpUrl, electronCookie, exportCookies, resolveMedia } = require('./media.cjs');
 
 app.setName('Muralop');
 const args = process.argv.slice(1);
@@ -116,18 +116,16 @@ async function importSession(fromFile) {
     const params = file ? ['--cookie-file', file] : ['--browser', settings.browser, '--profile', settings.profile];
     const records = JSON.parse(await processes.run(helper, params, { timeout: 20000, maxBytes: 2 * 1024 * 1024 }));
     let count = 0;
+    let skipped = 0;
     for (const record of records) {
-      if (!sessionDomain(record.domain)) continue;
-      const cookie = { url: `https://${record.domain.replace(/^\./, '')}${record.path || '/'}`,
-        name: record.name, value: record.value, domain: record.domain, path: record.path || '/',
-        secure: Boolean(record.secure), httpOnly: Boolean(record.http_only) };
-      if (record.expires > 0) cookie.expirationDate = record.expires;
-      await youtubeSession.cookies.set(cookie);
-      count++;
+      const cookie = electronCookie(record);
+      if (!cookie) continue;
+      // One cookie Chromium refuses must not abort the rest of the session.
+      try { await youtubeSession.cookies.set(cookie); count++; } catch { skipped++; }
     }
     if (!count) throw new Error('没有读到可用的 YouTube 登录会话');
     navigate('https://www.youtube.com/');
-    playback.update({ message: `已导入 ${count} 条登录会话，登录状态以网页显示为准。` });
+    playback.update({ message: `已导入 ${count} 条登录会话${skipped ? `（跳过 ${skipped} 条浏览器不接受的 Cookie）` : ''}，登录状态以网页显示为准。` });
   } finally { importing = false; publish(); }
 }
 

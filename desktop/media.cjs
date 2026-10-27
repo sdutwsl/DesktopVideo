@@ -24,6 +24,25 @@ function sessionDomain(domain) {
   return ['youtube.com', 'google.com', 'accounts.google.com'].includes(value) || value.endsWith('.youtube.com');
 }
 
+// Converts an imported cookie record into Electron's cookies.set() details.
+// A leading dot marks a domain cookie; without it the cookie is host-only, and
+// Chromium rejects __Host- cookies that carry a domain or a path other than "/".
+function electronCookie(record) {
+  if (!sessionDomain(record.domain)) return null;
+  const host = record.domain.replace(/^\./, '');
+  const hostPrefix = record.name.startsWith('__Host-');
+  const path = hostPrefix ? '/' : record.path || '/';
+  const cookie = { url: `https://${host}${path}`, name: record.name, value: record.value, path,
+    secure: Boolean(record.secure) || hostPrefix || record.name.startsWith('__Secure-'),
+    httpOnly: Boolean(record.http_only) };
+  if (record.domain.startsWith('.')) {
+    if (hostPrefix) return null;
+    cookie.domain = record.domain;
+  }
+  if (record.expires > 0) cookie.expirationDate = record.expires;
+  return cookie;
+}
+
 async function exportCookies(filename, records) {
   const rows = ['# Netscape HTTP Cookie File'];
   for (const c of records) {
@@ -70,4 +89,4 @@ async function resolveMedia(processes, extractor, source, { cookies, quality = '
   return { source, video: video.url, audio: audio?.url || '', userAgent, referrer, title: data.title || '在线视频' };
 }
 
-module.exports = { youtubeVideo, httpUrl, sessionDomain, exportCookies, resolveMedia };
+module.exports = { youtubeVideo, httpUrl, sessionDomain, electronCookie, exportCookies, resolveMedia };
