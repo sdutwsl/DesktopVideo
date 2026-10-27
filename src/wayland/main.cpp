@@ -51,7 +51,7 @@ std::string uiCommand()
     return {};
 }
 
-bool showMainWindow()
+bool showMainWindow(bool foreground = false)
 {
     std::string command = uiCommand();
     if (command.empty()) {
@@ -59,6 +59,13 @@ bool showMainWindow()
         return false;
     }
     char* argv[] = {command.data(), nullptr};
+    if (foreground) {
+        // Keep `muralop ui` in the terminal's foreground process group. A detached
+        // child would survive Ctrl+C and keep writing to the terminal after exit.
+        execvp(command.c_str(), argv);
+        fprintf(stderr, "[ui] cannot start muralop-ui: %s\n", strerror(errno));
+        return false;
+    }
     pid_t pid = 0;
     if (posix_spawnp(&pid, command.c_str(), nullptr, nullptr, argv, environ) != 0) {
         fputs("[ui] muralop-ui is not installed; see README for GUI setup\n", stderr);
@@ -200,7 +207,7 @@ int main(int argc, char** argv)
         } else if (!strcmp(argv[i], "--background")) {
             // The GUI starts the backend as a separate process.
         } else if (!strcmp(argv[i], "ui")) {
-            return showMainWindow() ? 0 : 1;
+            return showMainWindow(true) ? 0 : 1;
         } else
             args.push_back(argv[i]);
     }

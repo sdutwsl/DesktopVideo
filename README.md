@@ -79,7 +79,7 @@ cmake -S . -B build -G Ninja && ninja -C build
 muralop                    # 启动守护进程（托盘里选视频）
 muralop ~/Videos/a.mp4     # 启动并使用该视频
 muralop set a.mp4 DP-2     # 只给 DP-2 换视频
-muralop ui                 # 打开已安装的主界面
+muralop ui                 # 在终端前台打开主界面，Ctrl+C 可退出
 muralop pause | resume | mute | unmute | volume 40 | monitors | quit
 MURALOP_DEBUG=1 muralop         # 打印渲染和 mpv 的详细日志
 ```
