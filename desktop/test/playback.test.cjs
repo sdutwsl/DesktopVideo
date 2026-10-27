@@ -68,3 +68,10 @@ test('an unresponsive backend reports failure without blocking controls', async 
   assert.equal(playback.state.phase, 'error');
   assert.equal(playback.state.backendOnline, false);
 });
+
+test('an old backend without playback reporting is refused with a hint', async () => {
+  const playback = new Playback({ connect: async () => ({ ok: true, monitors: [], volume: 50 }) }, async () => ({}));
+  assert.equal(await playback.connect(), null);
+  assert.equal(playback.state.backendOnline, false);
+  assert.match(playback.state.message, /旧版播放后端/);
+});

@@ -27,6 +27,12 @@ class Playback extends EventEmitter {
     this.update({ phase: 'connecting', message: '正在连接播放后端…' });
     try {
       const state = await this.player.connect();
+      // Backends from before the Electron UI cannot play resolved streams.
+      if (!('playback' in state)) {
+        this.update({ backendOnline: false, phase: 'error',
+          message: '正在运行的是旧版播放后端。请先退出它（旧版托盘菜单或 muralop quit），再点“重连”。' });
+        return null;
+      }
       this.update({ ...state, backendOnline: true, phase: state.playback === 'playing' ? (state.paused ? 'paused' : 'playing') : 'ready',
         message: state.playback === 'playing' ? '播放中' : '已连接，可以选择视频' });
       return state;
