@@ -192,10 +192,30 @@ git tag v3.0.0 && git push origin v3.0.0
 
 CI 跑完全部构建后自动创建 GitHub Release，附上 Windows x64 / ARM64 的安装包和便携 zip、Windows/Linux x64 的 GUI 包、Ubuntu 26.04 的 amd64 / arm64 `.deb`、Fedora 44 的 x86_64 / aarch64 `.rpm`、macOS Apple Silicon 的 `.dmg`，以及 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v3.0.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
 
-## 日常修复流程
+## 开发与构建流程
 
-1. 在 Muralop 仓库修改源码，完成修复。
-2. 提交本次修改并推送到 `origin/master`。
+主界面和播放后端是两个独立进程，打包时必须来自同一份源码：
+
+| 部分 | 修改位置 | 构建或打包入口 | 产物 |
+|---|---|---|---|
+| 播放核心、原生窗口和托盘 | `src/core/`、`src/wayland/`、`src/win/`、`src/mac/` | `CMakeLists.txt`，CMake + Ninja | `muralop` / `muralop.exe` / `Muralop.app` |
+| Electron 主界面、网页、视频解析 | `desktop/` | Nix 的 `nix/package.nix` 或便携包的 `desktop/package.py` | `muralop-ui` / `muralop-ui.exe` |
+| 浏览器登录会话导入 | `gui/session.py` | Nix Python 包装器或 PyInstaller | `muralop-session` |
+
+当前主界面入口是 `desktop/main.cjs`。`desktop/` 的 CJS、HTML、CSS 直接随包复制，没有 `npm run build` 步骤；`gui/main.py` 是旧 Qt 界面，修改它不会改变当前发布的主界面。
+
+**Nix 构建链路：** `flake.nix` → `nix/package.nix` → CMake 编译后端 → 复制 `desktop/` 到包内 → 生成 `muralop-ui` 启动包装器。包装器指定同一个包里的后端，并配置 yt-dlp、Deno 和会话导入工具。只改 Electron 界面，也需要让这些源码进入新的包。
+
+**便携包构建链路：** `.github/workflows/build.yml` 先构建 Windows / Ubuntu 后端，GUI 任务再取得对应的后端产物，运行 `python desktop/package.py --backend-dir backend`。该脚本将 Electron、`desktop/` 源码、后端、会话导入工具、yt-dlp 和 Deno 组装到 `dist/gui/muralop-ui/`；Windows 还包含 `libmpv-2.dll`，最后由 CI 归档成 zip 或 tar.gz。
+
+完成修复后，将实际修改的源码和相关打包文件一起提交，再推送到 `origin/master`。推送会触发上述 CI，生成各平台构建产物；日常修复无需打版本 tag。交付时给出已推送的提交号，不能把仅存在于工作区或本地提交中的修改当成已经交付。
+
+```sh
+git add -p
+# 新增文件需另用 git add 文件路径加入提交
+git commit -m "说明本次修复"
+git push origin master
+```
 
 ## 代码结构
 
