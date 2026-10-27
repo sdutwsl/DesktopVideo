@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Muralop</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside>
+    <header><span class="brand-mark">M</span><div><h1>Muralop</h1><p>让视频成为桌面风景</p></div></header>
+    <section id="feedback" data-phase="connecting" aria-live="polite">
+      <div class="phase-row"><span id="indicator"></span><strong id="phase">连接中</strong><span id="elapsed"></span></div>
+      <p id="message">正在连接播放后端…</p>
+      <div id="progress"><span></span></div>
+      <button id="cancel" hidden>取消当前任务</button>
+    </section>
+    <form id="play-form">
+      <label for="monitor">播放到</label><select id="monitor"><option value="">所有显示器（默认视频）</option></select>
+      <label for="source">视频来源</label><input id="source" placeholder="粘贴 YouTube / 视频网址" autocomplete="off">
+      <button id="play" class="primary" type="submit">播放到桌面</button>
+    </form>
+    <div class="row"><button id="file">选择本地视频</button><button id="clear" title="恢复此显示器的默认视频">恢复默认</button></div>
+    <div class="playback-controls"><button id="pause">暂停</button><button id="mute">静音</button></div>
+    <label for="volume">音量 <output id="volume-value">50</output></label><input id="volume" type="range" min="0" max="100" value="50">
+    <label for="quality">画质</label><select id="quality"><option value="">自动画质</option><option value="bestvideo[height&lt;=1080]+bestaudio/best[height&lt;=1080]">最高 1080p</option><option value="bestvideo[height&lt;=2160]+bestaudio/best[height&lt;=2160]">最高 2160p</option></select>
+    <label class="check"><input id="auto" type="checkbox" checked><span>点击网页视频，直接播放到桌面</span></label>
+    <details><summary>登录会话与播放设置</summary>
+      <p class="hint">网页会记住登录。也可以导入浏览器会话或 cookies.txt。</p>
+      <label for="browser">导入来源</label><select id="browser"><option value="chrome">Chrome</option><option value="edge">Edge</option><option value="firefox">Firefox</option><option value="chromium">Chromium</option><option value="brave">Brave</option></select>
+      <input id="profile" placeholder="浏览器配置名称或路径，可留空">
+      <button id="import-browser">导入浏览器登录会话</button><button id="import-file">从 cookies.txt 导入</button>
+      <label for="extractor">yt-dlp 路径</label><input id="extractor" placeholder="使用内置解析器">
+      <p class="hint">留空使用随应用提供的版本。</p>
+    </details>
+    <footer><span>独立视频播放核心</span><button id="connect">重连</button></footer>
+  </aside>
+  <main>
+    <div class="browser-header"><div><h2>YouTube</h2><p>浏览、选择，然后播放到桌面</p></div><button id="play-current" class="accent">播放当前视频</button></div>
+    <form id="navigation"><button type="button" id="back" aria-label="后退">←</button><button type="button" id="forward" aria-label="前进">→</button><button type="button" id="reload" aria-label="刷新">↻</button><input id="address" value="https://www.youtube.com/" aria-label="网页地址"><button type="submit">前往</button></form>
+    <div id="browser-slot"><span>正在加载网页…</span></div>
+  </main>
+  <script src="renderer.cjs"></script>
+</body>
+</html>

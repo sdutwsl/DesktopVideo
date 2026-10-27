@@ -4,6 +4,8 @@
 #include "Platform.h"
 #include "MpvPlayer.h"
 
+#include <chrono>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -22,10 +24,15 @@ public:
     void refreshMonitors();
     // Tear every surface down and start over (the desktop host window was recreated).
     void rebuildSurfaces();
+    void updateOnlineOptions();
 
     // Video selection. An empty monitorId sets the default used by every monitor
     // without its own override. Paths are persisted in the config.
     void setVideo(const std::string& path, const std::string& monitorId = "");
+    void setResolvedVideo(const ResolvedMedia& media, const std::string& monitorId);
+    // Stops the players showing that selection (empty: the default video).
+    void stopPlayback(const std::string& monitorId);
+    std::string playbackState(const std::string& monitorId = "") const;
     void clearOverride(const std::string& monitorId);
     std::string videoFor(const std::string& monitorId) const;
     bool hasOverride(const std::string& monitorId) const;
@@ -68,6 +75,11 @@ private:
     Platform& platform_;
     Config& config_;
     std::vector<std::unique_ptr<Slot>> slots_;
+    struct Resolved {
+        ResolvedMedia media;
+        std::chrono::steady_clock::time_point at;
+    };
+    std::map<std::string, Resolved> resolved_;
     bool userPaused_ = false;
     bool locked_ = false;
     bool suspended_ = false;

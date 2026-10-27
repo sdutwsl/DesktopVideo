@@ -74,6 +74,13 @@ void Wallpaper::rebuildSurfaces()
     refreshMonitors();
 }
 
+void Wallpaper::updateOnlineOptions()
+{
+    const OnlineOptions online{config_.get("ytdlp_path"), config_.get("cookies_file"), config_.get("ytdlp_format")};
+    for (auto& slot : slots_)
+        slot->player->setOnlineOptions(online);
+}
+
 void Wallpaper::openSlot(Slot& slot)
 {
     const std::string path = videoFor(slot.monitor.id);
@@ -81,13 +88,22 @@ void Wallpaper::openSlot(Slot& slot)
         slot.player->stop();
         return;
     }
-    slot.player->open(path, slot.audio);
+    // Stream addresses resolved by the UI expire after a few hours. Without a
+    // fresh one (e.g. at login, before the UI runs) mpv's ytdl hook resolves the
+    // original address itself; loadfile is asynchronous either way.
+    const auto resolved = resolved_.find(hasOverride(slot.monitor.id) ? slot.monitor.id : "");
+    if (resolved != resolved_.end() && resolved->second.media.source == path
+        && std::chrono::steady_clock::now() - resolved->second.at < std::chrono::hours(4))
+        slot.player->openResolved(resolved->second.media, slot.audio);
+    else
+        slot.player->open(path, slot.audio);
     slot.player->setVolume(volume());
     slot.player->setMute(mute());
 }
 
 void Wallpaper::setVideo(const std::string& path, const std::string& monitorId)
 {
+    resolved_.erase(monitorId);
     if (monitorId.empty())
         config_.set(KEY_VIDEO, path);
     else
@@ -102,11 +118,46 @@ void Wallpaper::setVideo(const std::string& path, const std::string& monitorId)
     applyPlayback();
 }
 
+void Wallpaper::setResolvedVideo(const ResolvedMedia& media, const std::string& monitorId)
+{
+    // Only the original address is persisted; signed stream addresses stay in memory.
+    config_.set(monitorId.empty() ? KEY_VIDEO : overrideKey(monitorId), media.source);
+    resolved_[monitorId] = {media, std::chrono::steady_clock::now()};
+    config_.save();
+    for (auto& slot : slots_) {
+        if (monitorId.empty() ? !hasOverride(slot->monitor.id) : slot->monitor.id == monitorId)
+            openSlot(*slot);
+    }
+    applyPlayback();
+}
+
+void Wallpaper::stopPlayback(const std::string& monitorId)
+{
+    for (auto& slot : slots_)
+        if (monitorId.empty() ? !hasOverride(slot->monitor.id) : slot->monitor.id == monitorId)
+            slot->player->stop();
+}
+
+std::string Wallpaper::playbackState(const std::string& monitorId) const
+{
+    bool playing = false;
+    bool loading = false;
+    for (const auto& slot : slots_) {
+        if (!monitorId.empty() && slot->monitor.id != monitorId) continue;
+        const auto& state = slot->player->playbackState();
+        if (state == "error") return "error";
+        loading |= state == "loading";
+        playing |= state == "playing";
+    }
+    return loading ? "loading" : playing ? "playing" : "idle";
+}
+
 void Wallpaper::clearOverride(const std::string& monitorId)
 {
     if (!hasOverride(monitorId))
         return;
     config_.erase(overrideKey(monitorId));
+    resolved_.erase(monitorId);
     config_.save();
     if (Slot* slot = find(monitorId))
         openSlot(*slot);

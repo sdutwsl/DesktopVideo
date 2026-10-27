@@ -35,6 +35,20 @@ LRESULT CALLBACK testWindow(HWND window, UINT message, WPARAM wp, LPARAM lp)
 
 int main(int argc, char** argv)
 {
+    if (argc > 1 && std::string(argv[1]) == "rpc") {
+        try {
+            char input[32769];
+            std::cin.read(input, sizeof input);
+            const auto count = std::cin.gcount();
+            if (count > 32768) return 1;
+#ifdef _WIN32
+            std::cout << ControlPipe::request(std::string(input, count)) << '\n';
+#else
+            std::cout << Control::request(std::string(input, count)) << '\n';
+#endif
+            return 0;
+        } catch (const std::exception&) { return 1; }
+    }
     auto path = std::filesystem::temp_directory_path() / "muralop-control-test.ini";
     Config config(path.string());
     TestPlatform platform;
@@ -86,11 +100,18 @@ int main(int argc, char** argv)
     assert(ok("pause") && wallpaper.userPaused());
     assert(ok("resume") && !wallpaper.userPaused());
     assert(!ok("pause\nquit"));
-    assert(ok("online\nC:\\Program Files\\yt-dlp.exe\nC:\\a,b\\cookies.txt\n"));
     const int count = platform.created;
+    assert(ok("online\nC:\\Program Files\\yt-dlp.exe\nC:\\a,b\\cookies.txt\n"));
+    assert(platform.created == count); // Settings must not destroy a resolving player.
     assert(ok("online\nC:\\Program Files\\yt-dlp.exe\nC:\\a,b\\cookies.txt\n"));
     assert(platform.created == count); // Unchanged settings must not restart playback.
     assert(config.get("cookies_file") == "C:\\a,b\\cookies.txt");
+    assert(ok("play-resolved\nhttps://www.youtube.com/watch?v=abcdefghijk\nhttps://media.example/video\nhttps://media.example/audio\nExample agent\nhttps://www.youtube.com/\n"));
+    assert(wallpaper.videoFor("") == "https://www.youtube.com/watch?v=abcdefghijk");
+    assert(config.get("video").find("media.example") == std::string::npos);
+    assert(!ok("play-resolved\nhttps://youtube.com/\nfile:///secret\n\n\n\n"));
+    assert(ok("stop\n"));
+    assert(wallpaper.playbackState() == "idle");
     assert(!ok(std::string("set\nx\0quit\n", 12)));
     assert(ok("quit") && quit);
     std::filesystem::remove(path);

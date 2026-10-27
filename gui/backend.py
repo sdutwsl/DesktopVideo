@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import threading
 import time
 
 
@@ -35,46 +36,19 @@ def locate_ytdlp() -> str:
     return shutil.which("yt-dlp") or ""
 
 
-def _windows_request(payload: bytes) -> bytes:
-    import ctypes
-    from ctypes import wintypes
-
-    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-    advapi = ctypes.WinDLL("advapi32", use_last_error=True)
-    name = ctypes.create_unicode_buffer(256)
-    size = wintypes.DWORD(256)
-    advapi.GetUserNameW.argtypes = [wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
-    if not advapi.GetUserNameW(name, ctypes.byref(size)):
-        raise ctypes.WinError(ctypes.get_last_error())
-    session = wintypes.DWORD()
-    if not kernel.ProcessIdToSessionId(os.getpid(), ctypes.byref(session)):
-        raise ctypes.WinError(ctypes.get_last_error())
-    pipe = rf"\\.\pipe\Muralop.{session.value}.{name.value}"
-    kernel.CallNamedPipeW.argtypes = [wintypes.LPCWSTR, wintypes.LPVOID, wintypes.DWORD,
-                                    wintypes.LPVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), wintypes.DWORD]
-    kernel.CallNamedPipeW.restype = wintypes.BOOL
-    output = ctypes.create_string_buffer(65536)
-    count = wintypes.DWORD()
-    if not kernel.CallNamedPipeW(pipe, payload, len(payload), output, len(output), ctypes.byref(count), 2000):
-        raise ctypes.WinError(ctypes.get_last_error())
-    return output.raw[:count.value]
-
-
-def _linux_request(payload: str) -> str:
-    from PySide6.QtDBus import QDBusConnection, QDBusMessage
-
-    message = QDBusMessage.createMethodCall("org.muralop.Daemon", "/org/muralop/Daemon",
-                                          "org.muralop.Daemon", "Execute")
-    message.setArguments([payload])
-    reply = QDBusConnection.sessionBus().call(message, timeout=5000)
-    if reply.type() == QDBusMessage.MessageType.ErrorMessage:
-        raise ConnectionError(reply.errorMessage())
-    return reply.arguments()[0]
-
-
 class Backend:
     def __init__(self, executable: str):
         self.executable = executable
+        self.children = set()
+        self.lock = threading.Lock()
+        self.closed = False
+
+    def close(self):
+        with self.lock:
+            self.closed = True
+            for child in self.children:
+                if child.poll() is None:
+                    child.kill()
 
     def request(self, command: str, *args: str) -> dict:
         fields = (command, *args)
@@ -83,7 +57,26 @@ class Backend:
         payload = "\n".join(fields)
         if len(payload.encode()) > 32768:
             raise ValueError("请求过长")
-        data = _windows_request(payload.encode("utf-8")) if sys.platform == "win32" else _linux_request(payload)
+        # Native IPC lives in a disposable process. A stuck daemon or binding
+        # cannot hold Qt/Python's event loop or prevent the window from closing.
+        with self.lock:
+            if self.closed:
+                raise ConnectionError("界面已关闭")
+            child = subprocess.Popen([self.executable, "rpc"], stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
+            self.children.add(child)
+        try:
+            data, _error = child.communicate(payload.encode("utf-8"), timeout=4)
+            if child.returncode:
+                raise ConnectionError("壁纸后端无法连接或没有响应，请重启播放后端。")
+        except subprocess.TimeoutExpired:
+            child.kill()
+            child.communicate()
+            raise RuntimeError("壁纸后端响应超时，界面仍可操作；请重启播放后端。") from None
+        finally:
+            with self.lock:
+                self.children.discard(child)
         result = json.loads(data)
         if not result.get("ok"):
             raise RuntimeError(result.get("error", "壁纸后端请求失败"))
@@ -97,7 +90,8 @@ class Backend:
         subprocess.Popen([self.executable, "--background"], stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
-        for _ in range(40):
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
             time.sleep(0.25)
             try:
                 return self.request("status")

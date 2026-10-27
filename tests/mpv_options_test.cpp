@@ -5,6 +5,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <thread>
 
 static std::string option(muralop::MpvPlayer& player, const char* name, const char* key)
 {
@@ -54,4 +55,16 @@ int main()
     }
     std::filesystem::remove(deno);
     std::filesystem::remove(directory);
+
+    // A network source that keeps failing is retried, then reported instead of
+    // staying in "loading" forever.
+    assert(player.open("http://127.0.0.1:9/unreachable.mp4", false));
+    assert(player.playbackState() == "loading");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while (player.playbackState() == "loading" && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        player.processEvents();
+    }
+    assert(player.playbackState() == "error");
+    assert(!player.lastError().empty());
 }

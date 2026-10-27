@@ -127,9 +127,10 @@ master 每次提交的构建在 [Actions](https://github.com/sdutwsl/Muralop/act
 
 ## YouTube 主界面（Linux / Windows x64）
 
-Linux 可通过 Nix 包中的 `muralop-ui` 启动；也可在 Ubuntu 26.04 下载 `muralop-v*-linux-gui-x64.tar.gz`，解压后运行 `muralop-ui/muralop-ui`。Linux GUI 归档内的后端依赖 Ubuntu 26.04 的 libmpv、Wayland、EGL 和 sdbus-c++ 2；Nix 包会管理这些依赖。Windows 使用上文的 GUI zip。主界面关闭后壁纸继续运行，托盘菜单可以再次打开它。
+主界面基于 Electron，壁纸播放核心作为独立进程接入；解析视频时界面保持可操作，可随时取消。
+Linux 可通过 Nix 包中的 `muralop-ui` 启动；也可在 Ubuntu 26.04 下载 `muralop-v*-linux-gui-x64.tar.gz`，解压后运行 `muralop-ui/muralop-ui`。Linux GUI 归档内的后端依赖 Ubuntu 26.04 的 libmpv、Wayland、EGL 和 sdbus-c++ 2；Nix 包会管理这些依赖。Ubuntu 默认限制非特权用户命名空间，解压后需执行一次 `sudo chown root:root muralop-ui/chrome-sandbox && sudo chmod 4755 muralop-ui/chrome-sandbox`，否则 Chromium 沙箱无法启动。Windows 使用上文的 GUI zip。主界面关闭后壁纸继续运行，托盘菜单可以再次打开它。
 
-在内嵌网页浏览 YouTube，点击视频可直接设为桌面壁纸；也可以粘贴视频网址，给不同显示器指定不同视频。登录会话可从浏览器或 `cookies.txt` 导入。具体操作、Cookie 保存位置和开发运行方式见 [GUI 说明](gui/README.md)。macOS 目前没有这个主界面。
+在内嵌网页浏览 YouTube，点击视频可直接设为桌面壁纸；也可以粘贴视频网址，给不同显示器指定不同视频。点击后界面、窗口标题和托盘依次显示 **解析中**、**加载中**、**播放中**，失败时显示原因。YouTube 可能要求登录后才能解析：可在内嵌网页直接登录，或从浏览器、`cookies.txt` 导入登录会话。具体操作、Cookie 保存位置和开发运行方式见 [主界面说明](desktop/README.md)。macOS 目前没有这个主界面。
 
 ### 构建
 

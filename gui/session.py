@@ -101,3 +101,23 @@ def write_youtube_cookies(path: Path, records: list[dict]) -> None:
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+if __name__ == "__main__":
+    import argparse
+    import json
+    import sys
+
+    parser = argparse.ArgumentParser(description="Read scoped browser cookies for the Muralop desktop")
+    parser.add_argument("--browser")
+    parser.add_argument("--profile", default="")
+    parser.add_argument("--cookie-file")
+    arguments = parser.parse_args()
+    try:
+        records = read_cookie_file(arguments.cookie_file) if arguments.cookie_file else read_browser_cookies(arguments.browser, arguments.profile)
+        # This pipe is private to the desktop main process, never the webpage.
+        sys.stdout.reconfigure(encoding="utf-8")
+        print(json.dumps(records, ensure_ascii=False))
+    except Exception as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(1)
