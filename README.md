@@ -192,6 +192,14 @@ git tag v3.0.0 && git push origin v3.0.0
 
 CI 跑完全部构建后自动创建 GitHub Release，附上 Windows x64 / ARM64 的安装包和便携 zip、Windows/Linux x64 的 GUI 包、Ubuntu 26.04 的 amd64 / arm64 `.deb`、Fedora 44 的 x86_64 / aarch64 `.rpm`、macOS Apple Silicon 的 `.dmg`，以及 `SHA256SUMS`，更新说明根据提交记录自动生成。tag 和版本号对不上时发布会失败；`v3.0.0-rc1` 这类带 `-` 的 tag 发布为预发布版。
 
+## 日常修复同步流程
+
+1. 在 Muralop 仓库修改源码，完成修复。
+2. 提交本次修改并推送到 `origin/master`。
+3. 在 `~/nix-config` 运行 `nix flake update muralop --refresh`，将 `flake.lock` 中的 Muralop 更新到刚推送的提交。
+
+必须先推送源码，再更新 flake。`nix-config` 的 Muralop 输入来自 GitHub，本地尚未推送的修改不会被锁定版本引用。软件修复提交到 Muralop 仓库，`nix-config` 只更新对应依赖的锁定版本。
+
 ## 代码结构
 
 ```
