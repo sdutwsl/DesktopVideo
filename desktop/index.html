@@ -21,6 +21,11 @@
       <label for="source">视频来源</label><input id="source" placeholder="粘贴 YouTube / 视频网址" autocomplete="off">
       <button id="play" class="primary" type="submit">播放到桌面</button>
     </form>
+    <section id="playlist-panel" hidden>
+      <label id="playlist-title" for="playlist-entry">视频合集</label>
+      <select id="playlist-entry" aria-label="选择合集视频"></select>
+      <div class="row playlist-controls"><button id="previous-entry">上一个</button><button id="play-entry">播放所选</button><button id="next-entry">下一个</button></div>
+    </section>
     <div class="row"><button id="file">选择本地视频</button><button id="clear" title="恢复此显示器的默认视频">恢复默认</button></div>
     <div class="playback-controls"><button id="pause">暂停</button><button id="mute">静音</button></div>
     <label for="volume">音量 <output id="volume-value">50</output></label><input id="volume" type="range" min="0" max="100" value="50">
@@ -34,12 +39,13 @@
       <label for="extractor">yt-dlp 路径</label><input id="extractor" placeholder="使用内置解析器">
       <p class="hint">留空使用随应用提供的版本。</p>
     </details>
-    <footer><span>独立视频播放核心</span><button id="connect">重连</button></footer>
+    <footer><span>独立视频播放核心</span><button id="connect">重连</button><button id="quit-ui" title="退出界面，壁纸继续播放">退出界面</button></footer>
   </aside>
   <main>
-    <div class="browser-header"><div><h2>YouTube</h2><p>浏览、选择，然后播放到桌面</p></div><button id="play-current" class="accent">播放当前视频</button></div>
+    <div class="browser-header"><div><h2>YouTube</h2><p id="playback-summary" aria-live="polite">浏览、选择，然后播放到桌面</p></div><button id="play-current" class="accent">播放当前视频</button></div>
     <form id="navigation"><button type="button" id="back" aria-label="后退">←</button><button type="button" id="forward" aria-label="前进">→</button><button type="button" id="reload" aria-label="刷新">↻</button><input id="address" value="https://www.youtube.com/" aria-label="网页地址"><button type="submit">前往</button></form>
-    <div id="browser-slot"><span>正在加载网页…</span></div>
+    <p id="browser-status" role="status">正在加载网页…</p>
+    <div id="browser-slot"><span>网页尚未显示，可点击刷新重新加载。</span></div>
   </main>
   <script src="renderer.cjs"></script>
 </body>

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, dialog, Tray, Menu, nativeImage, session } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, dialog, session } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { existsSync } = require('node:fs');
@@ -6,7 +6,7 @@ const { pathToFileURL } = require('node:url');
 const { Processes, safeError } = require('./processes.cjs');
 const { PlayerPlugin } = require('./player.cjs');
 const { Playback } = require('./playback.cjs');
-const { youtubeVideo, httpUrl, electronCookie, exportCookies, resolveMedia } = require('./media.cjs');
+const { youtubeSource, httpUrl, electronCookie, exportCookies, resolveMedia, resolvePlaylist } = require('./media.cjs');
 
 app.setName('Muralop');
 const args = process.argv.slice(1);
@@ -27,51 +27,37 @@ const defaultExtractor = locate('yt-dlp', process.env.MURALOP_YTDLP);
 process.env.PATH = binaryDir + path.delimiter + process.env.PATH;
 const processes = new Processes();
 const player = new PlayerPlugin(backend, processes);
-let window, browser, tray, trayKey, playback, youtubeSession, pollTimer;
+let window, browser, playback, youtubeSession, pollTimer, quitting = false;
+let browserError = '', browserBounds;
+let publishedPlaylist;
 let settings = { autoPlay: true, quality: '', extractor: '', browser: 'chrome', profile: '' };
 let selectedMonitor = '', lastAuto = '', lastAutoAt = 0, importing = false;
 const labels = { connecting: '连接中', ready: '就绪', resolving: '解析中', loading: '加载中', playing: '播放中', paused: '已暂停', cancelled: '已取消', error: '失败' };
-
-function icon(phase) {
-  const n = 24, pixels = Buffer.alloc(n * n * 4);
-  const rgb = phase === 'error' ? [238, 103, 103] : ['resolving', 'loading', 'connecting'].includes(phase) ? [97, 162, 244] : [74, 196, 158];
-  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-    const distance = Math.hypot(x - 11.5, y - 11.5);
-    const ring = distance > 8 && distance < 11;
-    const mark = phase === 'error' ? (Math.abs(x - 11.5) < 1.5 && (y > 5 && y < 13 || y > 15 && y < 18))
-      : phase === 'paused' ? (y > 6 && y < 18 && (x > 7 && x < 10 || x > 13 && x < 16))
-      : (x > 8 && x < 17 && Math.abs(y - 11.5) < (17 - x) * 0.65);
-    if (ring || mark) { const at = (y * n + x) * 4; pixels[at] = rgb[2]; pixels[at + 1] = rgb[1]; pixels[at + 2] = rgb[0]; pixels[at + 3] = 255; }
-  }
-  return nativeImage.createFromBitmap(pixels, { width: n, height: n, scaleFactor: 1 });
-}
 
 function publish(state = playback.state) {
   const label = labels[state.phase] || state.phase;
   if (window && !window.isDestroyed()) {
     window.setTitle(`Muralop · ${label}${state.title ? ' · ' + state.title : ''}`);
-    window.webContents.send('state', { ...state, settings, defaultExtractor, importing });
-  }
-  // Status polls arrive several times a second; only touch the tray when it changes.
-  const key = [state.phase, state.title, state.paused, state.canCancel, state.backendOnline].join('\n');
-  if (tray && key !== trayKey) {
-    trayKey = key;
-    tray.setImage(icon(state.phase));
-    tray.setToolTip(`Muralop · ${label}${state.title ? '\n' + state.title : ''}`);
-    tray.setContextMenu(Menu.buildFromTemplate([
-      { label: `Muralop · ${label}`, enabled: false },
-      { label: '打开主界面', click: () => { window.show(); window.focus(); } },
-      { label: '取消当前任务', enabled: state.canCancel, click: () => { void playback.cancel(); } },
-      { type: 'separator' },
-      { label: state.paused ? '继续播放' : '暂停播放', enabled: state.backendOnline,
-        click: () => { void player.request(state.paused ? 'resume' : 'pause').then(() => playback.poll()).catch(showError); } },
-      { label: '关闭主界面（保留壁纸）', click: () => app.quit() },
-      { label: '停止壁纸并退出', click: () => { void player.request('quit').catch(() => {}).finally(() => app.quit()); } },
-    ]));
+    const payload = { ...state, settings, defaultExtractor, importing, browserError,
+      browserUrl: browser?.webContents.getURL(), browserLoading: browser?.webContents.isLoading() };
+    // A large collection is sent once, not with every status or navigation event.
+    if (publishedPlaylist === state.playlist) delete payload.playlist;
+    else publishedPlaylist = state.playlist;
+    window.webContents.send('state', payload);
   }
 }
 
-function showError(error) { playback.update({ phase: 'error', canCancel: false, message: safeError(error.message) }); }
+function showWindow() {
+  if (!window || window.isDestroyed()) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+  publish();
+}
+
+function showError(error) {
+  playback.update({ ...(playback.job ? {} : { phase: 'error', canCancel: false }), message: safeError(error.message) });
+}
 async function saveSettings() {
   await fs.mkdir(app.getPath('userData'), { recursive: true });
   await fs.writeFile(path.join(app.getPath('userData'), 'settings.json'), JSON.stringify(settings, null, 2), { mode: 0o600 });
@@ -80,13 +66,15 @@ function allowNavigation(value) { return httpUrl(value) || value === 'about:blan
 function navigate(value) {
   const url = String(value).trim();
   if (!httpUrl(url)) throw new Error('网页地址必须以 https:// 或 http:// 开头');
-  void browser.webContents.loadURL(url).catch(error => { if (error.code !== 'ERR_ABORTED') showError(error); });
+  void browser.webContents.loadURL(url).catch(error => {
+    if (error.code !== 'ERR_ABORTED') { browserError = '网页加载失败：' + safeError(error.message); publish(); }
+  });
 }
 async function play(source, monitor = selectedMonitor) {
   await playback.play(source, monitor, settings.quality);
 }
 function autoPlay(value) {
-  const url = youtubeVideo(value);
+  const url = youtubeSource(value);
   if (!settings.autoPlay || !url || (url === lastAuto && Date.now() - lastAutoAt < 2000)) return;
   lastAuto = url; lastAutoAt = Date.now();
   void play(url).catch(showError);
@@ -143,7 +131,8 @@ async function clearSession() {
   playback.update({ message: '已清除登录会话，可以在网页中重新登录或导入。' });
 }
 
-app.on('second-instance', () => { if (window) { window.show(); window.focus(); } });
+app.on('second-instance', showWindow);
+app.on('activate', showWindow);
 if (!smoke && !app.requestSingleInstanceLock()) app.quit();
 else app.whenReady().then(async () => {
   try { settings = { ...settings, ...JSON.parse(await fs.readFile(path.join(app.getPath('userData'), 'settings.json'), 'utf8')) }; } catch { /* first launch */ }
@@ -156,7 +145,7 @@ else app.whenReady().then(async () => {
   youtubeSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   youtubeSession.setPermissionCheckHandler(() => false);
   youtubeSession.on('will-download', event => event.preventDefault());
-  playback = new Playback(player, async (source, quality, signal) => {
+  const prepareResolver = async (quality, signal) => {
     const cookieFile = path.join(app.getPath('userData'), 'youtube-cookies.txt');
     await exportCookies(cookieFile, await youtubeSession.cookies.get({}));
     // The backend falls back to its own yt-dlp hook when it restarts without
@@ -164,37 +153,48 @@ else app.whenReady().then(async () => {
     // Nix store paths change on upgrade; the Nix backend has its own yt-dlp on PATH.
     const bundled = path.isAbsolute(defaultExtractor) && !defaultExtractor.startsWith('/nix/store/') ? defaultExtractor : '';
     await player.request('online', [settings.extractor || bundled, cookieFile, quality], signal);
-    return resolveMedia(processes, settings.extractor || defaultExtractor, source, { cookies: cookieFile, quality, signal });
-  });
+    return { cookies: cookieFile, quality, signal };
+  };
+  playback = new Playback(player, async (source, quality, signal) =>
+    resolveMedia(processes, settings.extractor || defaultExtractor, source, await prepareResolver(quality, signal)),
+  async (source, signal) => resolvePlaylist(processes, settings.extractor || defaultExtractor, source, await prepareResolver(settings.quality, signal)));
   window = new BrowserWindow({ width: 1400, height: 940, minWidth: 1080, minHeight: 700,
     backgroundColor: '#101820', show: false, autoHideMenuBar: true,
-    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false } });
   window.setMenu(null);
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', event => event.preventDefault());
   browser = new WebContentsView({ webPreferences: { partition: smoke ? 'muralop-smoke' : 'persist:muralop-youtube',
-    preload: path.join(__dirname, 'browser-preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true } });
+    preload: path.join(__dirname, 'browser-preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } });
   window.contentView.addChildView(browser);
   wireBrowser(browser.webContents);
   browser.webContents.on('did-navigate-in-page', (_event, url, isMainFrame) => { if (isMainFrame) autoPlay(url); });
   browser.webContents.on('did-finish-load', () => { browser.webContents.send('auto-play', settings.autoPlay); });
-  const browserState = () => {
-    if (!window.isDestroyed()) window.webContents.send('state', { ...playback.state, settings, defaultExtractor, importing,
-      browserUrl: browser.webContents.getURL(), browserLoading: browser.webContents.isLoading() });
-  };
-  for (const event of ['did-navigate', 'did-navigate-in-page', 'did-start-loading', 'did-stop-loading']) browser.webContents.on(event, browserState);
-  browser.webContents.on('render-process-gone', () => playback.update({ message: '网页进程已退出，可以点击刷新重新加载。' }));
+  for (const event of ['did-navigate', 'did-navigate-in-page', 'did-start-loading', 'did-stop-loading']) browser.webContents.on(event, () => publish());
+  browser.webContents.on('did-start-loading', () => { browserError = ''; browser.setVisible(true); publish(); });
+  browser.webContents.on('render-process-gone', (_event, details) => {
+    if (quitting) return;
+    browserError = `网页进程已退出（${details.reason}），请点击刷新恢复。`;
+    browser.setVisible(false);
+    publish();
+  });
+  browser.webContents.on('unresponsive', () => { browserError = '网页暂时没有响应，可以继续使用左侧控制，或点击刷新。'; publish(); });
+  browser.webContents.on('responsive', () => { browserError = ''; publish(); });
   browser.webContents.on('did-fail-load', (_event, code, description, _url, mainFrame) => {
-    if (mainFrame && code !== -3) playback.update({ message: '网页加载失败：' + description });
+    if (mainFrame && code !== -3) { browserError = '网页加载失败：' + description; publish(); }
   });
   const localPage = pathToFileURL(path.join(__dirname, 'index.html')).href;
   const trusted = event => event.sender === window.webContents && event.senderFrame?.url === localPage;
   ipcMain.on('browser-layout', (event, bounds) => {
     if (!trusted(event) || !bounds || !['x','y','width','height'].every(k => Number.isFinite(bounds[k]))) return;
+    if (window.isMinimized() || bounds.width <= 0 || bounds.height <= 0) return;
     const [width, height] = window.getContentSize();
     const x = Math.max(0, Math.min(width - 1, Math.round(bounds.x)));
     const y = Math.max(0, Math.min(height - 1, Math.round(bounds.y)));
-    browser.setBounds({ x, y, width: Math.max(1, Math.min(width - x, Math.round(bounds.width))), height: Math.max(1, Math.min(height - y, Math.round(bounds.height))) });
+    const next = { x, y, width: Math.max(1, Math.min(width - x, Math.round(bounds.width))), height: Math.max(1, Math.min(height - y, Math.round(bounds.height))) };
+    if (browserBounds && Object.keys(next).every(key => browserBounds[key] === next[key])) return;
+    browserBounds = next;
+    browser.setBounds(next);
   });
   ipcMain.on('youtube-play', (event, value) => {
     if (event.sender !== browser.webContents || event.senderFrame !== browser.webContents.mainFrame) return;
@@ -204,11 +204,13 @@ else app.whenReady().then(async () => {
     if (!trusted(event)) throw new Error('Untrusted IPC sender');
     try {
       switch (action) {
-        case 'state': publish(); return;
+        case 'state': publishedPlaylist = undefined; publish(); return;
         case 'play': void play(String(value || '')).catch(showError); return;
         case 'play-current': void play(browser.webContents.getURL()).catch(showError); return;
+        case 'play-entry': void playback.playEntry(value, selectedMonitor, settings.quality).catch(showError); return;
         case 'cancel': void playback.cancel(); return;
         case 'connect': void playback.connect(); return;
+        case 'quit-ui': app.quit(); return;
         case 'monitor': selectedMonitor = String(value || ''); return;
         case 'pause': await player.request(playback.state.paused ? 'resume' : 'pause'); break;
         case 'mute': await player.request(playback.state.mute ? 'unmute' : 'mute'); break;
@@ -239,11 +241,13 @@ else app.whenReady().then(async () => {
     } catch (error) { showError(error); }
   });
   playback.on('state', publish);
-  if (!smoke) {
-    tray = new Tray(icon('connecting'));
-    tray.on('double-click', () => { window.show(); window.focus(); });
-    tray.on('click', () => { window.show(); window.focus(); });
-  }
+  // The native backend owns the application's single tray icon. Its "open UI"
+  // action launches a second instance, which restores this existing window.
+  window.on('close', event => {
+    if (quitting || smoke) return;
+    event.preventDefault();
+    window.hide();
+  });
   window.on('closed', () => {
     clearTimeout(pollTimer);
     playback.close();
@@ -273,7 +277,7 @@ else app.whenReady().then(async () => {
   }
 }).catch(error => { console.error(safeError(error.message)); app.exit(1); });
 
-app.on('before-quit', () => { clearTimeout(pollTimer); playback?.close(); processes.close(); tray?.destroy(); });
+app.on('before-quit', () => { quitting = true; clearTimeout(pollTimer); playback?.close(); processes.close(); });
 app.on('window-all-closed', () => app.quit());
 process.on('SIGINT', () => app.quit());
 process.on('SIGTERM', () => app.quit());

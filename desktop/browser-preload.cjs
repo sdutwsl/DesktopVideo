@@ -8,7 +8,7 @@ document.addEventListener('click', event => {
   if (!anchor) return;
   const url = new URL(anchor.href, location.href);
   if (!['www.youtube.com', 'm.youtube.com'].includes(url.hostname)) return;
-  if (url.pathname !== '/watch' && !/^\/(shorts|live)\//.test(url.pathname)) return;
+  if (url.pathname !== '/watch' && url.pathname !== '/playlist' && !/^\/(shorts|live)\//.test(url.pathname)) return;
   event.preventDefault();
   event.stopImmediatePropagation();
   ipcRenderer.send('youtube-play', url.href);

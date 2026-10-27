@@ -3,11 +3,38 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { youtubeVideo, electronCookie, exportCookies, resolveMedia } = require('../media.cjs');
+const { youtubeVideo, youtubeSource, youtubePlaylist, electronCookie, exportCookies, resolveMedia, resolvePlaylist } = require('../media.cjs');
 
 test('navigation accepts only actual YouTube video addresses', () => {
   assert.equal(youtubeVideo('https://youtu.be/abcdefghijk?t=5'), 'https://www.youtube.com/watch?v=abcdefghijk');
   for (const url of ['https://youtube.com.evil.test/watch?v=abcdefghijk','file:///secret','https://user@youtube.com/watch?v=abcdefghijk','https://youtu.be/abcdefghijk/other']) assert.equal(youtubeVideo(url), null);
+});
+
+test('collection links retain their list and selected entry without changing single-video URLs', () => {
+  assert.equal(youtubeSource('https://youtu.be/abcdefghijk?list=PLdemo&index=3&t=5'), 'https://www.youtube.com/watch?v=abcdefghijk&list=PLdemo&index=3');
+  assert.equal(youtubeSource('https://www.youtube.com/playlist?list=PLdemo'), 'https://www.youtube.com/playlist?list=PLdemo');
+  assert.equal(youtubeSource('https://www.youtube.com/watch?v=abcdefghijk'), youtubeVideo('https://www.youtube.com/watch?v=abcdefghijk'));
+  for (const url of ['https://youtube.com.evil.test/playlist?list=PLdemo', 'https://user@youtube.com/playlist?list=PLdemo',
+    'https://youtube.com/playlist?list=bad%26list', 'https://youtube.com/results?list=PLdemo']) assert.equal(youtubePlaylist(url), null);
+});
+
+test('collection discovery lists every playable entry without resolving all streams', async () => {
+  let command;
+  const processes = { run: async (_exe, args) => {
+    command = args;
+    return JSON.stringify({ title: 'Collection', entries: [
+      { id: 'abcdefghijk', title: 'First' }, null,
+      { id: 'private0000', availability: 'private' },
+      { url: 'https://www.youtube.com/watch?v=lmnopqrstuv', title: 'Second', playlist_index: 4 },
+      { id: '12345678901', title: 'Third' }, { url: 'https://example.com/thumbnail.jpg' },
+    ] });
+  } };
+  const list = await resolvePlaylist(processes, 'extractor', 'https://www.youtube.com/playlist?list=PLdemo', { cookies: 'cookies.txt' });
+  assert.deepEqual(list.entries.map(e => e.title), ['First', 'Second', 'Third']);
+  assert.deepEqual(list.entries.map(e => e.index), [1, 4, 5]);
+  assert.ok(command.includes('--flat-playlist') && command.includes('--yes-playlist') && command.includes('--cookies'));
+  assert.ok(!command.includes('--no-playlist'));
+  await assert.rejects(resolvePlaylist({ run: async () => '{"entries":[null]}' }, 'x', 'url'), /没有可播放的视频/);
 });
 
 test('resolver selects separate streams without passing signed URLs to the UI state', async () => {

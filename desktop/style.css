@@ -32,6 +32,9 @@ button.primary { width:100%; background:#4cb193; color:#08251c; font-weight:700;
 button.primary:hover { background:#62c3a6; }
 .row, .playback-controls { display:flex; gap:8px; }
 .row button, .playback-controls button { flex:1; }
+.playlist-controls { margin-top:8px; }
+.playlist-controls button { padding:8px 4px; }
+#playlist-panel { margin-bottom:14px; }
 .playback-controls { margin-top:17px; }
 #cancel { width:100%; margin-top:12px; background:#233f52; border-color:#416784; }
 [hidden] { display:none !important; }
@@ -48,6 +51,11 @@ footer { display:flex; align-items:center; justify-content:space-between; color:
 footer button { font-size:11px; padding:5px 10px; }
 main { min-width:0; display:flex; flex-direction:column; padding:22px 22px 18px; }
 .browser-header { display:flex; align-items:center; justify-content:space-between; padding-bottom:18px; }
+.browser-header > div { min-width:0; padding-right:14px; }
+#playback-summary { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#playback-summary[data-phase=resolving], #playback-summary[data-phase=loading] { color:#78b7ff; }
+#browser-status { margin:0 0 10px; font-size:12px; color:#91a6b7; }
+#browser-status[data-error=true] { color:#ff919a; }
 h2 { font-size:18px; margin:0 0 5px; }
 .accent { color:#9ddbc6; background:#16392f; border-color:#2a6251; }
 #navigation { display:flex; gap:7px; margin-bottom:13px; }
