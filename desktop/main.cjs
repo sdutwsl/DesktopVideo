@@ -116,17 +116,31 @@ async function importSession(fromFile) {
     const params = file ? ['--cookie-file', file] : ['--browser', settings.browser, '--profile', settings.profile];
     const records = JSON.parse(await processes.run(helper, params, { timeout: 20000, maxBytes: 2 * 1024 * 1024 }));
     let count = 0;
+    const cookies = records.map(electronCookie).filter(Boolean);
+    if (!cookies.length) throw new Error('没有读到可用的 YouTube 登录会话');
+    // Replace the session instead of mixing it with an existing login: two
+    // Google sessions in one jar make Google refuse to sign in.
+    await youtubeSession.clearStorageData({ storages: ['cookies'] });
     let skipped = 0;
-    for (const record of records) {
-      const cookie = electronCookie(record);
-      if (!cookie) continue;
+    for (const cookie of cookies) {
       // One cookie Chromium refuses must not abort the rest of the session.
       try { await youtubeSession.cookies.set(cookie); count++; } catch { skipped++; }
     }
-    if (!count) throw new Error('没有读到可用的 YouTube 登录会话');
+    if (!count) throw new Error('浏览器不接受导入的登录会话');
     navigate('https://www.youtube.com/');
     playback.update({ message: `已导入 ${count} 条登录会话${skipped ? `（跳过 ${skipped} 条浏览器不接受的 Cookie）` : ''}，登录状态以网页显示为准。` });
   } finally { importing = false; publish(); }
+}
+
+async function clearSession() {
+  const { response } = await dialog.showMessageBox(window, { type: 'question', buttons: ['清除', '取消'], defaultId: 1, cancelId: 1,
+    message: '清除内嵌网页的登录会话？', detail: '会退出内嵌网页中的 YouTube 和 Google 登录，之后需要重新登录或导入。' });
+  if (response !== 0) return;
+  await youtubeSession.clearStorageData();
+  await youtubeSession.clearCache();
+  await fs.rm(path.join(app.getPath('userData'), 'youtube-cookies.txt'), { force: true });
+  navigate('https://www.youtube.com/');
+  playback.update({ message: '已清除登录会话，可以在网页中重新登录或导入。' });
 }
 
 app.on('second-instance', () => { if (window) { window.show(); window.focus(); } });
@@ -218,6 +232,7 @@ else app.whenReady().then(async () => {
         case 'reload': browser.webContents.reload(); return;
         case 'import-file': await importSession(true); return;
         case 'import-browser': await importSession(false); return;
+        case 'clear-session': await clearSession(); return;
         default: throw new Error('未知操作');
       }
       await playback.poll();

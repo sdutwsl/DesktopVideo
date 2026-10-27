@@ -27,10 +27,10 @@
     <label for="quality">画质</label><select id="quality"><option value="">自动画质</option><option value="bestvideo[height&lt;=1080]+bestaudio/best[height&lt;=1080]">最高 1080p</option><option value="bestvideo[height&lt;=2160]+bestaudio/best[height&lt;=2160]">最高 2160p</option></select>
     <label class="check"><input id="auto" type="checkbox" checked><span>点击网页视频，直接播放到桌面</span></label>
     <details><summary>登录会话与播放设置</summary>
-      <p class="hint">网页会记住登录。也可以导入浏览器会话或 cookies.txt。</p>
+      <p class="hint">网页会记住登录。也可以导入浏览器会话或 cookies.txt，导入会替换现有登录。Google 提示 Cookie 有问题时，先清除登录会话再登录。</p>
       <label for="browser">导入来源</label><select id="browser"><option value="chrome">Chrome</option><option value="edge">Edge</option><option value="firefox">Firefox</option><option value="chromium">Chromium</option><option value="brave">Brave</option></select>
       <input id="profile" placeholder="浏览器配置名称或路径，可留空">
-      <button id="import-browser">导入浏览器登录会话</button><button id="import-file">从 cookies.txt 导入</button>
+      <button id="import-browser">导入浏览器登录会话</button><button id="import-file">从 cookies.txt 导入</button><button id="clear-session">清除登录会话</button>
       <label for="extractor">yt-dlp 路径</label><input id="extractor" placeholder="使用内置解析器">
       <p class="hint">留空使用随应用提供的版本。</p>
     </details>

@@ -15,7 +15,7 @@ window.muralop.onState(next => {
   $('pause').textContent = state.paused ? '继续' : '暂停';
   $('mute').textContent = state.mute ? '取消静音' : '静音';
   for (const id of ['pause','mute','volume','clear','play-current']) $(id).disabled = !state.backendOnline;
-  for (const id of ['import-browser','import-file']) $(id).disabled = state.importing;
+  for (const id of ['import-browser','import-file','clear-session']) $(id).disabled = state.importing;
   $('import-browser').textContent = state.importing ? '正在导入会话…' : '导入浏览器登录会话';
   if (document.activeElement !== $('volume')) { $('volume').value = state.volume; $('volume-value').textContent = state.volume; }
   const monitors = state.monitors || [];
@@ -40,7 +40,7 @@ setInterval(() => {
 }, 250);
 $('play-form').addEventListener('submit', event => { event.preventDefault(); invoke('play', $('source').value); });
 $('navigation').addEventListener('submit', event => { event.preventDefault(); invoke('navigate', $('address').value); });
-for (const action of ['cancel','pause','mute','file','clear','connect','back','forward','reload','play-current','import-browser','import-file']) $(action).addEventListener('click', () => invoke(action));
+for (const action of ['cancel','pause','mute','file','clear','connect','back','forward','reload','play-current','import-browser','import-file','clear-session']) $(action).addEventListener('click', () => invoke(action));
 $('monitor').addEventListener('change', () => invoke('monitor', $('monitor').value));
 $('volume').addEventListener('input', () => { $('volume-value').textContent = $('volume').value; });
 $('volume').addEventListener('change', () => invoke('volume', Number($('volume').value)));
