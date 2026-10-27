@@ -47,6 +47,7 @@ public:
     static const char* SERVICE;
     static const char* PATH;
     static const char* INTERFACE;
+    static std::string request(const std::string& payload);
 
     struct Handlers {
         std::function<void(std::string path, std::string monitor)> setVideo;

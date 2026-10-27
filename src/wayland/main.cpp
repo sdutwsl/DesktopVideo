@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <iostream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -90,6 +91,7 @@ void usage()
           "  set FILE [MONITOR]    set the video, optionally for one monitor only\n"
           "  choose [MONITOR]      open a file dialog\n"
           "  ui                    open the YouTube control window\n"
+          "  rpc                   read one control request from stdin, reply as JSON\n"
           "  pause | resume        pause / resume playback\n"
           "  mute | unmute\n"
           "  volume N              0..100\n"
@@ -210,6 +212,20 @@ int main(int argc, char** argv)
             return showMainWindow(true) ? 0 : 1;
         } else
             args.push_back(argv[i]);
+    }
+
+    if (args == std::vector<std::string>{"rpc"}) {
+        try {
+            char input[32769];
+            std::cin.read(input, sizeof input);
+            const auto count = std::cin.gcount();
+            if (count > 32768) throw std::runtime_error("Control request is too large");
+            std::cout << Control::request(std::string(input, count)) << '\n';
+            return 0;
+        } catch (const std::exception& error) {
+            fprintf(stderr, "muralop: %s\n", error.what());
+            return 1;
+        }
     }
 
     std::unique_ptr<sdbus::IConnection> session;

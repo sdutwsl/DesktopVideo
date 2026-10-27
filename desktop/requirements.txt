@@ -1,0 +1,2 @@
+yt-dlp[default]==2026.10.21
+pycryptodomex

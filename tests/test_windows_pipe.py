@@ -18,9 +18,6 @@ from backend import Backend
 def test_real_named_pipe_unicode_commands_and_clean_shutdown():
     executable = os.environ["MURALOP_CONTROL_TEST"]
     process = subprocess.Popen([executable, "--serve"], creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
-    if sys.platform != "win32":
-        from PySide6.QtCore import QCoreApplication
-        qt_app = QCoreApplication.instance() or QCoreApplication([])
     backend = Backend(executable)
     try:
         for _ in range(40):

@@ -455,6 +455,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.ready = False
         self.timer.stop()
+        if self.backend and hasattr(self.backend, "close"):
+            self.backend.close()
         self.settings.setValue("auto_play", self.auto.isChecked())
         self.settings.setValue("browser", self.browser.currentData())
         self.settings.setValue("browser_profile", self.browser_profile.text())

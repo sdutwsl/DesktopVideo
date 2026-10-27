@@ -26,6 +26,7 @@ __pycache__/
 .pytest_cache/
 *.pyc
 dist/
+node_modules/
 *.spec
 /build-*.exe
 /build-*.pdb

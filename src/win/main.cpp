@@ -17,6 +17,7 @@
 
 #include <functional>
 #include <filesystem>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -243,6 +244,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR cmdLine, int)
 {
+    if (wcscmp(cmdLine, L"rpc") == 0) {
+        try {
+            char input[32769];
+            std::cin.read(input, sizeof input);
+            const auto count = std::cin.gcount();
+            if (count > 32768) throw std::runtime_error("Control request is too large");
+            std::cout << ControlPipe::request(std::string(input, count)) << '\n';
+            return 0;
+        } catch (const std::exception& error) {
+            std::cerr << error.what() << '\n';
+            return 1;
+        }
+    }
     HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Muralop.SingleInstance");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         if (!wcsstr(cmdLine, L"--background") && uiAvailable()) showMainWindow();

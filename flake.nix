@@ -41,6 +41,7 @@
       devShells = forAll (pkgs: {
         default = pkgs.mkShell {
           inputsFrom = [ self.packages.${pkgs.stdenv.hostPlatform.system}.default ];
+          packages = [ pkgs.electron pkgs.nodejs ];
         };
         # Cross-compile the Windows exe and its packages: nix develop .#mingw (x64, with
         # cmake/mingw-x86_64.cmake) or .#mingw-arm64 (ARM64, with cmake/mingw-aarch64.cmake).

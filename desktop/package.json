@@ -1,0 +1,14 @@
+{
+  "name": "muralop-desktop",
+  "version": "3.0.0",
+  "private": true,
+  "description": "Muralop desktop controls and YouTube browser",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs"
+  },
+  "devDependencies": {
+    "electron": "43.8.3"
+  }
+}

@@ -178,17 +178,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
       - name: Install GUI build dependencies
-        run: python -m pip install -r gui/requirements.txt pyinstaller pytest
-      - name: Prepare private Linux Qt runtime libraries
+        run: |
+          python -m pip install -r desktop/requirements.txt pyinstaller pytest
+          npm ci --prefix desktop
+      - name: Test Electron tasks and process cancellation
+        run: npm test --prefix desktop
+      - name: Prepare private Linux Chromium runtime libraries
         if: runner.os == 'Linux'
         run: |
-          mkdir -p qt-runtime
-          cd qt-runtime
+          mkdir -p chromium-runtime
+          cd chromium-runtime
           mkdir -p apt-state/lists/partial apt-cache/archives/partial
           apt-get -o Dir::State::lists="$PWD/apt-state/lists" -o Dir::Cache="$PWD/apt-cache" update
           apt-get -o Dir::State::lists="$PWD/apt-state/lists" -o Dir::Cache="$PWD/apt-cache" download \
-            libegl1 libgl1 libglvnd0 libglx0 libxcb-cursor0 libxkbcommon-x11-0 libnss3 libasound2t64
+            libegl1 libgl1 libglvnd0 libglx0 libnss3 libasound2t64
           for deb in ./*.deb; do dpkg-deb -x "$deb" .; done
           echo "LD_LIBRARY_PATH=$PWD/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
       - name: Download Windows backend
@@ -202,9 +211,8 @@ jobs:
         shell: pwsh
         run: |
           $env:MURALOP_CONTROL_TEST = "$pwd/backend/muralop_control_test.exe"
-          $env:QT_QPA_PLATFORM = 'offscreen'
-          python -m pytest tests -q
-          python gui/main.py --smoke-test gui-preview.png
+          python -m pytest tests/test_session.py tests/test_windows_pipe.py -q
+          npm start --prefix desktop -- --smoke-test ../gui-preview.png
       - name: Download Ubuntu backend
         if: runner.os == 'Linux'
         uses: actions/download-artifact@v4
@@ -219,18 +227,21 @@ jobs:
           cp backend-extract/usr/bin/muralop backend/
       - name: Test Linux GUI
         if: runner.os == 'Linux'
-        env:
-          QT_QPA_PLATFORM: offscreen
-          QTWEBENGINE_DISABLE_SANDBOX: '1'
-          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
         run: |
-          python -m pytest tests -vv -s
-          python gui/main.py --smoke-test gui-preview.png
+          python -m pytest tests/test_session.py tests/test_windows_pipe.py -q
+          xvfb-run -a npm start --prefix desktop -- --no-sandbox --disable-gpu --smoke-test ../gui-preview.png
       - name: Package GUI, yt-dlp and Deno
-        env:
-          QTWEBENGINE_DISABLE_SANDBOX: ${{ runner.os == 'Linux' && '1' || '' }}
-          QTWEBENGINE_CHROMIUM_FLAGS: ${{ runner.os == 'Linux' && '--disable-gpu' || '' }}
-        run: python gui/package.py --backend-dir backend
+        run: python desktop/package.py --backend-dir backend
+      - name: Smoke-test packaged Electron on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $process = Start-Process ./dist/gui/muralop-ui/muralop-ui.exe -ArgumentList '--smoke-test', "$pwd/build-electron/packaged-preview.png" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'Packaged GUI failed' }
+          if (!(Test-Path build-electron/packaged-preview.png)) { throw 'Missing GUI preview' }
+      - name: Smoke-test packaged Electron on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a dist/gui/muralop-ui/muralop-ui --no-sandbox --disable-gpu --smoke-test build-electron/packaged-preview.png
       - name: Archive GUI bundle
         shell: bash
         run: |

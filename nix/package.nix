@@ -15,7 +15,7 @@
   yt-dlp,
   fetchFromGitHub,
   deno,
-  qt6,
+  electron,
   makeWrapper,
 }:
 
@@ -30,7 +30,12 @@ let
       sha256 = "0s7ay24d2d6glijsgx42kbn61x46s9h69h4v6sp6l6dvzawm180b";
     };
   });
-  guiPython = python3.withPackages (ps: [ ps.pyside6 youtubeDlp ps.pycryptodomex ]);
+  # The yt-dlp application is not a Python module; the session importer needs
+  # the library (and its keyring dependencies) at the same version.
+  sessionPython = python3.withPackages (ps: [
+    (ps.yt-dlp.overridePythonAttrs (_old: { inherit (youtubeDlp) version src; }))
+    ps.pycryptodomex
+  ]);
 in
 stdenv.mkDerivation {
   pname = "muralop";
@@ -50,6 +55,7 @@ stdenv.mkDerivation {
       ../src/wayland
       ../tests
       ../gui
+      ../desktop
     ];
   };
 
@@ -58,7 +64,6 @@ stdenv.mkDerivation {
     ninja
     pkg-config
     wayland-scanner
-    qt6.wrapQtAppsHook
     makeWrapper
   ];
 
@@ -69,25 +74,23 @@ stdenv.mkDerivation {
     libffi # wayland-client.pc depends on it
     sdbus-cpp_2
     systemdLibs # sd-bus, required by sdbus-cpp
-    qt6.qtwebengine
-    qt6.qtbase
   ];
 
   doCheck = true;
-  dontWrapQtApps = true;
   postInstall = ''
-    mkdir -p $out/share/muralop/gui
-    cp $src/gui/*.py $out/share/muralop/gui/
+    mkdir -p $out/share/muralop/desktop
+    cp $src/desktop/{*.cjs,*.html,*.css,package.json} $out/share/muralop/desktop/
+    cp $src/gui/session.py $out/share/muralop/
   '';
   postFixup = ''
-    makeWrapper ${guiPython}/bin/python $out/bin/muralop-ui \
-      --add-flags "$out/share/muralop/gui/main.py" \
+    makeWrapper ${electron}/bin/electron $out/bin/muralop-ui \
+      --add-flags "$out/share/muralop/desktop" \
       --add-flags "--backend $out/bin/muralop" \
       --prefix PATH : ${lib.makeBinPath [ youtubeDlp deno ]} \
-      --unset QT_PLUGIN_PATH \
-      --unset QT_QPA_PLATFORMTHEME \
-      --unset QT_STYLE_OVERRIDE \
-      "''${qtWrapperArgs[@]}"
+      --set MURALOP_YTDLP ${youtubeDlp}/bin/yt-dlp \
+      --set MURALOP_SESSION_HELPER $out/bin/muralop-session
+    makeWrapper ${sessionPython}/bin/python $out/bin/muralop-session \
+      --add-flags "$out/share/muralop/session.py"
     wrapProgram $out/bin/muralop --prefix PATH : ${lib.makeBinPath [ youtubeDlp deno ]}
   '';
 

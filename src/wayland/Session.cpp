@@ -1,6 +1,7 @@
 #include "Session.h"
 
 #include <cstdio>
+#include <chrono>
 #include <map>
 
 namespace muralop {
@@ -124,6 +125,16 @@ void FileChooser::open(const std::string& title, std::function<void(std::string)
 const char* Control::SERVICE = "org.muralop.Daemon";
 const char* Control::PATH = "/org/muralop/Daemon";
 const char* Control::INTERFACE = "org.muralop.Daemon";
+
+std::string Control::request(const std::string& payload)
+{
+    auto bus = sdbus::createSessionBusConnection();
+    auto proxy = sdbus::createProxy(*bus, sdbus::ServiceName(SERVICE), sdbus::ObjectPath(PATH));
+    std::string result;
+    proxy->callMethod("Execute").onInterface(INTERFACE)
+        .withTimeout(std::chrono::seconds(3)).withArguments(payload).storeResultsTo(result);
+    return result;
+}
 
 Control::Control(sdbus::IConnection& bus, Handlers handlers, AppControl& appControl) : handlers_(std::move(handlers))
 {

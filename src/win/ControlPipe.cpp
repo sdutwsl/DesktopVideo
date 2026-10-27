@@ -4,6 +4,21 @@
 #include <stdexcept>
 
 namespace muralop {
+std::string ControlPipe::request(const std::string& payload)
+{
+    wchar_t username[256];
+    DWORD length = 256, session = 0;
+    if (!GetUserNameW(username, &length) || !ProcessIdToSessionId(GetCurrentProcessId(), &session))
+        throw std::runtime_error("Cannot identify the current Windows session");
+    const std::wstring name = L"\\\\.\\pipe\\Muralop." + std::to_wstring(session) + L"." + username;
+    char output[65536];
+    DWORD count = 0;
+    if (!CallNamedPipeW(name.c_str(), const_cast<char*>(payload.data()), DWORD(payload.size()),
+                        output, sizeof output, &count, 2000))
+        throw std::runtime_error("Wallpaper backend is unavailable or did not respond");
+    return std::string(output, count);
+}
+
 ControlPipe::ControlPipe(HWND window, AppControl& control) : window_(window), control_(control)
 {
     wchar_t username[256];

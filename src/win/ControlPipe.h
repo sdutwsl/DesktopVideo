@@ -14,6 +14,7 @@ public:
     ControlPipe(HWND window, AppControl& control);
     ~ControlPipe();
     void dispatch();
+    static std::string request(const std::string& payload);
 
 private:
     struct Request {

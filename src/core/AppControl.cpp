@@ -30,6 +30,7 @@ std::string AppControl::state() const
         << ",\"mute\":" << (wallpaper_.mute() ? "true" : "false")
         << ",\"volume\":" << wallpaper_.volume()
         << ",\"video\":" << quote(wallpaper_.videoFor(""))
+        << ",\"playback\":" << quote(wallpaper_.playbackState())
         << ",\"error\":" << quote(wallpaper_.lastError()) << ",\"monitors\":[";
     bool first = true;
     for (const auto& m : wallpaper_.monitors()) {
@@ -37,6 +38,7 @@ std::string AppControl::state() const
         first = false;
         out << "{\"id\":" << quote(m.id) << ",\"width\":" << m.width << ",\"height\":" << m.height
             << ",\"primary\":" << (m.primary ? "true" : "false")
+            << ",\"playback\":" << quote(wallpaper_.playbackState(m.id))
             << ",\"video\":" << quote(wallpaper_.videoFor(m.id)) << '}';
     }
     return out.str() + "]}";
@@ -64,7 +66,18 @@ std::string AppControl::execute(const std::string& request)
                 if (!found) throw std::runtime_error("Monitor is no longer connected");
             }
             wallpaper_.setVideo(args[1], args[2]);
-        } else if (cmd == "clear" && args.size() == 2) wallpaper_.clearOverride(args[1]);
+        } else if (cmd == "play-resolved" && args.size() == 7) {
+            auto online = [](const std::string& url) { return url.starts_with("https://") || url.starts_with("http://"); };
+            if (!online(args[1]) || !online(args[2]) || (!args[3].empty() && !online(args[3])))
+                throw std::runtime_error("Resolved media must use HTTP or HTTPS");
+            if (!args[6].empty()) {
+                bool found = false;
+                for (const auto& monitor : wallpaper_.monitors()) found |= monitor.id == args[6];
+                if (!found) throw std::runtime_error("Monitor is no longer connected");
+            }
+            wallpaper_.setResolvedVideo({args[1], args[2], args[3], args[4], args[5]}, args[6]);
+        } else if (cmd == "stop" && args.size() <= 2) wallpaper_.stopPlayback(args.size() == 2 ? args[1] : "");
+        else if (cmd == "clear" && args.size() == 2) wallpaper_.clearOverride(args[1]);
         else if ((cmd == "pause" || cmd == "resume") && args.size() == 1) wallpaper_.setUserPaused(cmd == "pause");
         else if ((cmd == "mute" || cmd == "unmute") && args.size() == 1) wallpaper_.setMute(cmd == "mute");
         else if (cmd == "volume" && args.size() == 2) {
@@ -80,7 +93,7 @@ std::string AppControl::execute(const std::string& request)
             config_.set("cookies_file", args[2]);
             config_.set("ytdlp_format", args[3]);
             if (!config_.save()) throw std::runtime_error("Cannot save online playback settings");
-            if (changed) wallpaper_.rebuildSurfaces();
+            if (changed) wallpaper_.updateOnlineOptions();
         } else if (cmd == "quit" && args.size() == 1) quit_();
         else throw std::runtime_error("Unknown command or invalid arguments");
         return state();
