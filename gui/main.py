@@ -6,6 +6,7 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 import os
 from pathlib import Path
+import signal
 import sys
 from urllib.parse import parse_qs, urlsplit
 
@@ -52,7 +53,11 @@ class Jobs(QObject):
 
     def submit(self, name, operation):
         self.pending += 1
-        future = self.pool.submit(operation)
+        try:
+            future = self.pool.submit(operation)
+        except RuntimeError:
+            self.pending -= 1
+            return  # A queued Qt callback ran while the window was closing.
 
         def complete(done):
             try:
@@ -448,6 +453,7 @@ class MainWindow(QMainWindow):
         self.status.setText("已导入会话，正在刷新 YouTube。登录是否有效以网页显示为准。")
 
     def closeEvent(self, event):
+        self.ready = False
         self.timer.stop()
         self.settings.setValue("auto_play", self.auto.isChecked())
         self.settings.setValue("browser", self.browser.currentData())
@@ -466,6 +472,13 @@ def main():
     app = QApplication(sys.argv[:1])
     app.setApplicationName("Muralop")
     app.setOrganizationName("Muralop")
+    signal.signal(signal.SIGINT, lambda *_: app.quit())
+    signal.signal(signal.SIGTERM, lambda *_: app.quit())
+    # Wake Python regularly while Qt runs its native event loop so Ctrl+C
+    # reaches the handlers even before the backend's status timer starts.
+    signal_timer = QTimer(app)
+    signal_timer.timeout.connect(lambda: None)
+    signal_timer.start(200)
     if sys.platform == "win32":
         # The offscreen test platform has no system font database on Windows.
         for filename in ("segoeui.ttf", "msyh.ttc"):
