@@ -42,8 +42,10 @@ LayerSurface::LayerSurface(WaylandDisplay& display, Output& output, const Monito
         wp_fractional_scale_v1_add_listener(fractional_, &listener, this);
     }
 
+    // KWin maps the "desktop" namespace to WindowType::Desktop. Its overview
+    // background item selects desktop windows, independently of the shell layer.
     layer_ = zwlr_layer_shell_v1_get_layer_surface(display_.layerShell(), surface_, output_.output,
-                                                   ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND, "wallpaper");
+                                                   ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND, "desktop");
     zwlr_layer_surface_v1_set_anchor(layer_, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
                                                  ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
     zwlr_layer_surface_v1_set_exclusive_zone(layer_, -1);   // ignore panels, cover the whole output
