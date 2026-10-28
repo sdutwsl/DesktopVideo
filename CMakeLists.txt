@@ -195,6 +195,7 @@ else()
         src/wayland/main.cpp
         src/wayland/EventLoop.cpp
         src/wayland/LayerSurface.cpp
+        src/wayland/Mpris.cpp
         src/wayland/Session.cpp
         src/wayland/Tray.cpp
         src/wayland/WaylandDisplay.cpp
@@ -259,7 +260,7 @@ if(MURALOP_BUILD_NODE_PLUGIN)
     else()
         target_sources(muralop_player PRIVATE
             src/wayland/EventLoop.cpp src/wayland/LayerSurface.cpp
-            src/wayland/Session.cpp src/wayland/WaylandDisplay.cpp ${PROTOCOL_SOURCES})
+            src/wayland/Mpris.cpp src/wayland/Session.cpp src/wayland/WaylandDisplay.cpp ${PROTOCOL_SOURCES})
         target_include_directories(muralop_player PRIVATE src/wayland "${PROTOCOL_OUT}")
         target_link_libraries(muralop_player PRIVATE PkgConfig::WAYLAND PkgConfig::SDBUS)
         install(TARGETS muralop_player LIBRARY DESTINATION "${CMAKE_INSTALL_DATADIR}/muralop/desktop")

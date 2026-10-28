@@ -40,6 +40,12 @@ public:
     // Pause reasons. Playback runs only while none of them applies.
     void setUserPaused(bool paused);
     bool userPaused() const { return userPaused_; }
+    bool paused() const { return userPaused_ || suspended_ || (locked_ && config_.getBool("pause_when_locked", true)); }
+    void play();
+    void stop();
+    void seek(double seconds, bool absolute);
+    MediaInfo mediaInfo() const;
+    bool canPlay() const;
     void setLocked(bool locked);
     void setSuspended(bool suspended);
 

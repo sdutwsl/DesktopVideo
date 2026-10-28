@@ -87,6 +87,30 @@ MURALOP_DEBUG=1 muralop         # 打印渲染和 mpv 的详细日志
 应用的播放插件和独立播放器均可在 session bus 上注册 `org.muralop.Daemon`，也可以直接用 `busctl --user call ...` 控制；
 Sway 用户可以在 `swayidle` 的 lock/unlock 钩子里调 `muralop pause/resume`。
 
+### 媒体键与 playerctl
+
+Linux 应用及独立播放器提供 [MPRIS 2](https://specifications.freedesktop.org/mpris/latest/) 接口，播放器名称为 `muralop`。使用 [playerctl](https://github.com/altdesktop/playerctl) 控制：
+
+```sh
+playerctl -p muralop status
+playerctl -p muralop play-pause
+playerctl -p muralop play
+playerctl -p muralop pause
+playerctl -p muralop stop
+playerctl -p muralop volume 0.5
+playerctl -p muralop position 10+
+playerctl -p muralop position 30
+playerctl -p muralop metadata --format '{{title}}'
+playerctl -p muralop next
+playerctl -p muralop previous
+```
+
+`volume` 的 0～1 对应应用的 0～100；设置非零音量会取消静音。`position 10+` 前进 10 秒，`position 30` 跳至第 30 秒，只在视频本身可跳转时生效。停止会取消待完成的解析，再播放会从头打开当前视频。
+
+标题、时长和进度跟随出声显示器；播放、暂停、停止、音量和跳转控制所有显示器。合集切换只在当前出声视频属于应用已读取的合集、并有对应条目时启用，沿用该次播放的显示器目标。单视频及独立播放器不提供合集切换。媒体信息只公开原始视频网址或本地文件 URI，不公开签名播放流。还支持 `playerctl -p muralop open URI` 打开网址或 `file:///` 本地文件；KDE 等桌面的媒体控件可读取同一接口。
+
+服务名为 `org.mpris.MediaPlayer2.muralop`，对象为 `/org/mpris/MediaPlayer2`，随应用启动、退出，复用现有会话总线。当前只提供正常倍速，不提供随机播放或循环模式切换。本次接入尚未构建和桌面联调。
+
 开机自启：把 `data/muralop.desktop` 复制到 `~/.config/autostart/`。
 
 ### 在 NixOS / home-manager 中引用
@@ -191,6 +215,7 @@ audio_monitor=DP-1             # 哪个显示器出声，留空用主屏
 
 #### Feature
 
+- Linux 支持 MPRIS 2 和 `playerctl -p muralop`：播放、暂停、停止、音量、跳转进度、标题与时长查询，以及当前合集的上一条 / 下一条；复用会话 D-Bus，不增加系统服务（待构建及桌面联调）。
 - 播放能力改为原生 Node-API 插件，由应用管理启动、渲染线程和退出；保留自动硬解、多屏、锁屏和休眠处理，Nix 及 Windows/Linux 便携包同步携带插件（待构建和实播验证）。
 - 新增“关于与诊断”：统一应用版本、文件标识、运行位置、最近 20 条错误，支持复制诊断信息和清空记录（待界面实测）。
 - 支持切换 YouTube、B站、抖音、TikTok、Vimeo、Dailymotion、Twitch，点击视频直接播放；其他 yt-dlp 站点可粘贴网址解析（待逐站实播验证）。
@@ -277,7 +302,7 @@ git push origin master
 src/node/       Node-API 播放插件、专用渲染线程与平台生命周期
 desktop/        Electron 应用、浏览与解析、托盘、诊断、插件宿主和便携打包
 src/core/       平台无关：libmpv 封装、配置、多屏控制器、菜单模型
-src/wayland/    layer-shell 表面 + EGL 渲染、事件循环、SNI 托盘、D-Bus 会话事件
+src/wayland/    layer-shell 表面 + EGL 渲染、事件循环、SNI 托盘、D-Bus 会话事件、MPRIS
 src/win/        WorkerW 表面、Shell_NotifyIcon 托盘、锁屏检测、NSIS 安装脚本
 src/mac/        桌面层窗口 + CAOpenGLLayer、菜单栏图标、系统事件、Info.plist 和 dmg 打包脚本
 cmake/          FindMpv、MinGW 工具链（x86_64 / aarch64）

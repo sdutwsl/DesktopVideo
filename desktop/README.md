@@ -38,6 +38,14 @@
 
 完整站点列表见 [yt-dlp 官方支持列表](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)。内嵌点击入口覆盖上面列出的站点；其他站点使用网址输入框。实际解析取决于所捆绑的 yt-dlp 版本、站点变化、登录和地区限制，不能将支持列表视为每个视频均可播放的保证。
 
+## Linux 媒体控制
+
+通过 `playerctl -p muralop` 使用 MPRIS：`play`、`pause`、`play-pause`、`stop`、`volume`、`position`、`metadata`、`next`、`previous`、`open`。例如 `playerctl -p muralop volume 0.5` 或 `playerctl -p muralop position 10+`。完整行为及示例见 [媒体键与 playerctl](../README.md#媒体键与-playerctl)（待构建和桌面联调）。
+
+停止会取消仍在解析或加载的视频。下一条 / 上一条沿用当前出声视频所属合集和原播放目标，不会因之后改了显示器下拉框而切换到另一块屏幕。未加载合集、处于首尾边界或媒体不可跳转时，按对应能力标志禁用操作。
+
+原生侧的 `Mpris` 对象复用会话 D-Bus，并通过 mpv 事件缓存标题、时长、进度和跳转能力；没有同步轮询 mpv 属性。应用宿主每 250 毫秒读取一次原生事件队列，将窗口、合集和播放控制交回应用现有取消及命令队列。MPRIS 的状态变化按协议发送 PropertiesChanged / Seeked，进度不逐帧广播。
+
 ## 开发
 
 NixOS 可直接运行：
@@ -66,7 +74,7 @@ python desktop/package.py --player-dir build/desktop
 `desktop/player.cjs` 统一管理插件宿主、请求取消和超时；启动上限 15 秒，普通请求 4 秒，退出清理 3 秒。`desktop/player-host.cjs` 只负责加载模块和传递结果；应用退出时一并回收宿主。
 Linux 通过随应用提供的纯 Node 运行时及 Node IPC 加载插件，隔离 Electron 内置 FFmpeg 的同名符号和内存分配器；不直接在 Electron 中加载 libmpv，也不对整个依赖树进行深度绑定。Windows 继续使用 Electron utility process。两者共用相同的插件命令接口和退出清理。
 
-内部命令复用 `AppControl`：`status`、`play-resolved`、`set`、`stop`、`online`、`pause`、`resume`、`mute`、`unmute`、`volume`、`clear`、`quit`。命令参数使用换行分隔，返回 JSON；这是插件内的调用格式，不再由外部 `muralop rpc` 转发。
-`status` 返回显示器、音量、暂停状态、错误和 `playback`（`idle`、`loading`、`playing`、`error`）。`play-resolved` 依次接收原始网址、视频流网址、音频流网址、User-Agent、Referer、显示器。配置只保存原始网址；签名流地址只在播放期间驻留内存。
+内部命令复用 `AppControl`：`status`、`play-resolved`、`set`、`stop`、`online`、`pause`、`resume`、`mute`、`unmute`、`volume`、`clear`、`quit`，以及 MPRIS 桥接使用的 `play`、`stop-all`、`media-context`、`events`。命令参数使用换行分隔，返回 JSON；这是插件内的调用格式，不再由外部 `muralop rpc` 转发。
+`status` 返回显示器、音量、暂停状态、错误和 `playback`（`idle`、`loading`、`playing`、`error`）。`play-resolved` 依次接收原始网址、视频流网址、音频流网址、User-Agent、Referer、显示器，以及可选的视频标题。配置只保存原始网址；签名流地址只在播放期间驻留内存。
 
 Linux 插件复用 layer-shell/EGL、D-Bus 锁屏和休眠通知，并保留已有命令行控制接口；Windows 插件复用 WorkerW 和会话/电源消息处理，不创建原生托盘。独立原生发行包继续使用原有平台外壳；旧版 PySide6 界面保留在 `gui/`，当前应用入口为 Electron。

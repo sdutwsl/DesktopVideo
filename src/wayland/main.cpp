@@ -3,6 +3,7 @@
 
 #include "DBus.h"
 #include "EventLoop.h"
+#include "Mpris.h"
 #include "Session.h"
 #include "Tray.h"
 #include "WaylandDisplay.h"
@@ -358,6 +359,18 @@ int main(int argc, char** argv)
             return names;
         },
     }, appControl);
+
+    std::unique_ptr<Mpris> mpris;
+    try {
+        mpris = std::make_unique<Mpris>(loop, *session, wallpaper, Mpris::Actions{
+            actions.showMainWindow, actions.quit, {}, {},
+            [&](std::string source) { wallpaper.setVideo(source); rebuildMenu(); },
+            [&](std::string) { rebuildMenu(); },
+            {},
+        });
+    } catch (const sdbus::Error& error) {
+        fprintf(stderr, "[mpris] unavailable: %s\n", error.getMessage().c_str());
+    }
 
     SignalSource signals([&] { loop.quit(); });
     loop.add(&signals);

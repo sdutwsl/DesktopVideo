@@ -63,12 +63,20 @@ class PlayerPlugin extends EventEmitter {
       ? fork(host, [], { execPath: this.nodePath || 'node', execArgv: [], env: environment, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] })
       : utilityProcess.fork(host, [], { serviceName: 'Muralop Playback', stdio: 'pipe' });
     this.child = child;
+    this.navigationKey = null;
     let errors = '';
     child.stdout?.on('data', () => {});
     child.stderr?.on('data', chunk => { errors = (errors + chunk.toString()).slice(-4096); });
     child.on('error', error => this.fail(child, new Error('无法启动播放宿主：' + safeError(error.message))));
     child.on('message', message => {
-      if (this.child !== child || !message || !Number.isInteger(message.id)) return;
+      if (this.child !== child || !message) return;
+      if (message.event === 'mpris') {
+        if (['raise','quit','next','previous','open-uri','play','play-pause','pause','stop','changed'].includes(message.action))
+          this.emit('mpris', { action: message.action, value: String(message.value || '') });
+        return;
+      }
+      if (message.event === 'mpris-error') { this.emit('mpris-error', new Error(safeError(message.error))); return; }
+      if (!Number.isInteger(message.id)) return;
       const pending = this.pending.get(message.id);
       if (!pending) return;
       if (message.error) this.fail(child, new Error(safeError(message.error)));
@@ -101,7 +109,22 @@ class PlayerPlugin extends EventEmitter {
   }
 
   playResolved(media, monitor, signal) {
-    return this.request('play-resolved', [media.source, media.video, media.audio, media.userAgent, media.referrer, monitor], signal);
+    const title = String(media.title || '').replace(/[\r\n\0]/g, ' ').slice(0, 1024);
+    return this.request('play-resolved', [media.source, media.video, media.audio, media.userAgent, media.referrer, monitor, title], signal);
+  }
+
+  syncNavigation(state) {
+    if (process.platform !== 'linux' || this.closed) return;
+    if (!state.playerReady) { this.navigationKey = null; return; }
+    const index = state.playlistIndex ?? -1;
+    const count = state.playlist?.entries.length || 0;
+    const fields = [state.source || '', index >= 0 && index + 1 < count ? '1' : '0', index > 0 ? '1' : '0', state.monitor || ''];
+    const key = JSON.stringify(fields);
+    if (this.navigationKey === key) return;
+    this.navigationKey = key;
+    void this.request('media-context', fields).catch(error => {
+      if (error.name !== 'AbortError') this.emit('mpris-error', error);
+    });
   }
 
   async close() {

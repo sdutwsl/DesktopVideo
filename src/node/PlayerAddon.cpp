@@ -26,6 +26,7 @@
 #include <wtsapi32.h>
 #else
 #include "wayland/DBus.h"
+#include "wayland/Mpris.h"
 #include "wayland/Session.h"
 #include "wayland/WaylandDisplay.h"
 #endif
@@ -282,6 +283,7 @@ private:
         std::unique_ptr<SessionMonitor> monitor;
         std::unique_ptr<FileChooser> chooser;
         std::unique_ptr<Control> remote;
+        std::unique_ptr<Mpris> mpris;
         if (session) {
             chooser = std::make_unique<FileChooser>(*session);
             remote = std::make_unique<Control>(*session, Control::Handlers{
@@ -305,6 +307,22 @@ private:
             monitor->onLocked = [&](bool locked) { wallpaper.setLocked(locked); };
             monitor->onSleep = [&](bool sleeping) { wallpaper.setSuspended(sleeping); };
             monitor->onShutdown = [&] { loop.quit(); };
+            try {
+                mpris = std::make_unique<Mpris>(loop, *session, wallpaper, Mpris::Actions{
+                    [&] { control.postEvent("raise"); },
+                    [&] { control.postEvent("quit"); },
+                    [&] { control.postEvent("next", wallpaper.mediaInfo().source); },
+                    [&] { control.postEvent("previous", wallpaper.mediaInfo().source); },
+                    [&](std::string uri) { control.postEvent("open-uri", std::move(uri)); },
+                    [&](std::string action) { control.postEvent(std::move(action)); },
+                    [&](std::string action) { control.postEvent(std::move(action)); },
+                });
+                control.onMediaContext = [&](const std::string& source, bool next, bool previous, const std::string& target) {
+                    mpris->setNavigation(source, next, previous, target);
+                };
+            } catch (const sdbus::Error& error) {
+                fprintf(stderr, "[mpris] unavailable: %s\n", error.getMessage().c_str());
+            }
         }
         display.onOutputsChanged = [&] { wallpaper.refreshMonitors(); };
         display.onDisconnected = [&] { loop.quit(); };

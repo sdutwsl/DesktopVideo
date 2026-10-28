@@ -38,6 +38,7 @@ const player = new PlayerPlugin({ pluginPath, configPath, legacyPath, version: a
   nodePath: locate('node', process.env.MURALOP_NODE) });
 let window, browser, playback, youtubeSession, pollTimer, quitting = false;
 let tray, diagnostics, trayState = '';
+let mediaActions = Promise.resolve();
 const lastErrors = new Map();
 let browserError = '', browserBounds;
 let browserHasContent = false, browserSlow = false, browserLoadTimer;
@@ -52,6 +53,7 @@ function publish(state = playback.state) {
   if (quitting) return;
   rememberError('playback', state.phase === 'error' ? state.message : '', '播放');
   rememberError('playlist', state.playlistError, '合集');
+  player.syncNavigation(state);
   updateTray(state);
   const label = labels[state.phase] || state.phase;
   if (window && !window.isDestroyed()) {
@@ -177,6 +179,51 @@ function playQueued() {
   const request = queuedPlay;
   queuedPlay = null;
   if (request) void play(request.source, request.monitor).catch(showError);
+}
+async function handleMediaAction({ action, value }) {
+  if (quitting) return;
+  switch (action) {
+    case 'raise': showWindow(); return;
+    case 'quit': await quitApplication(); return;
+    case 'open-uri': void play(value).catch(showError); return;
+    case 'next':
+    case 'previous': {
+      if (value !== playback.state.source || playback.state.playlistIndex < 0) return;
+      const index = playback.state.playlistIndex + (action === 'next' ? 1 : -1);
+      if (playback.state.playlist?.entries[index])
+        void playback.playEntry(index, playback.state.monitor || '', settings.quality).catch(showError);
+      return;
+    }
+    case 'stop':
+      await playback.cancel(false);
+      await playback.control(() => player.request('stop-all'));
+      playback.invalidateStatus();
+      playback.update({ phase: 'ready', canCancel: false, message: '已停止播放，可以重新选择视频' });
+      break;
+    case 'play':
+    case 'play-pause': {
+      const result = await playback.control(async () => {
+        const status = await player.request('status');
+        const command = action === 'play-pause' && !status.paused && ['playing', 'loading'].includes(status.mediaPlayback || status.playback) ? 'pause' : 'play';
+        return player.request(command);
+      });
+      playback.invalidateStatus();
+      if (!playback.job) {
+        const active = result.mediaPlayback || result.playback;
+        const phase = active === 'playing' ? (result.paused ? 'paused' : 'playing') : active === 'loading' ? 'loading' : 'ready';
+        playback.update({ phase, message: phase === 'playing' ? '播放中' : phase === 'paused' ? '已暂停'
+          : phase === 'loading' ? '加载中 · 正在恢复播放…' : '播放已就绪，可以选择视频' });
+      }
+      break;
+    }
+    case 'pause': {
+      const status = await playback.control(() => player.request('pause'));
+      playback.invalidateStatus();
+      playback.update({ paused: status.paused });
+      break;
+    }
+  }
+  await playback.poll();
 }
 function autoPlay(value) {
   const url = youtubeSource(value) || videoSource(value);
@@ -400,6 +447,11 @@ else app.whenReady().then(async () => {
   playback.on('state', state => { publish(state); if (state.playerReady && queuedPlay) playQueued(); });
   player.on('failure', error => playback.playerFailed(safeError(error.message)));
   player.on('quit', () => { void quitApplication(); });
+  player.on('mpris', action => {
+    if (action.action === 'raise' || action.action === 'quit') { void handleMediaAction(action).catch(showError); return; }
+    mediaActions = mediaActions.catch(() => {}).then(() => handleMediaAction(action)).catch(showError);
+  });
+  player.on('mpris-error', error => { diagnostics.record('MPRIS', error.message); publish(); });
   if (!smoke) createTray();
   for (const event of ['show', 'hide', 'minimize', 'restore', 'maximize', 'unmaximize']) window.on(event, () => publish());
   // A single application-owned tray restores this exact window and web contents.

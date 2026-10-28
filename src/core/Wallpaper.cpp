@@ -181,6 +181,43 @@ void Wallpaper::setUserPaused(bool paused)
     applyPlayback();
 }
 
+void Wallpaper::play()
+{
+    userPaused_ = false;
+    for (auto& slot : slots_)
+        if (slot->player->path().empty() || slot->player->playbackState() == "error") openSlot(*slot);
+    applyPlayback();
+}
+
+void Wallpaper::stop()
+{
+    for (auto& slot : slots_) slot->player->stop();
+}
+
+void Wallpaper::seek(double seconds, bool absolute)
+{
+    for (auto& slot : slots_) slot->player->seek(seconds, absolute);
+}
+
+MediaInfo Wallpaper::mediaInfo() const
+{
+    const Slot* selected = nullptr;
+    for (const auto& slot : slots_) {
+        if (!selected) selected = slot.get();
+        if (slot->audio) { selected = slot.get(); break; }
+    }
+    auto info = selected ? selected->player->mediaInfo() : MediaInfo{};
+    if (selected) info.monitor = selected->monitor.id;
+    return info;
+}
+
+bool Wallpaper::canPlay() const
+{
+    for (const auto& slot : slots_)
+        if (!videoFor(slot->monitor.id).empty()) return true;
+    return false;
+}
+
 void Wallpaper::setLocked(bool locked)
 {
     if (locked_ == locked)

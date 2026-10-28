@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include <filesystem>
 #include <vector>
 
@@ -136,6 +137,13 @@ bool MpvPlayer::initialize()
         return false;
     }
     initialized_ = true;
+    // Observe on mpv's core thread; MPRIS getters never block the render loop
+    // with synchronous property reads.
+    mpv_observe_property(mpv_, 0, "time-pos", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(mpv_, 0, "duration", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(mpv_, 0, "pause", MPV_FORMAT_FLAG);
+    mpv_observe_property(mpv_, 0, "seekable", MPV_FORMAT_FLAG);
+    mpv_observe_property(mpv_, 0, "media-title", MPV_FORMAT_STRING);
     return true;
 }
 
@@ -147,7 +155,25 @@ void MpvPlayer::processEvents()
         mpv_event* ev = mpv_wait_event(mpv_, 0);
         if (ev->event_id == MPV_EVENT_NONE)
             break;
-        if (ev->event_id == MPV_EVENT_LOG_MESSAGE) {
+        if (ev->event_id == MPV_EVENT_PROPERTY_CHANGE) {
+            auto* property = static_cast<mpv_event_property*>(ev->data);
+            if (!property->data) continue;
+            if (!strcmp(property->name, "time-pos") && property->format == MPV_FORMAT_DOUBLE) {
+                position_ = *static_cast<double*>(property->data);
+                if (seeking_) { ++seekSerial_; seeking_ = false; }
+            } else if (!strcmp(property->name, "duration") && property->format == MPV_FORMAT_DOUBLE)
+                duration_ = *static_cast<double*>(property->data);
+            else if (!strcmp(property->name, "pause") && property->format == MPV_FORMAT_FLAG)
+                paused_ = *static_cast<int*>(property->data) != 0;
+            else if (!strcmp(property->name, "seekable") && property->format == MPV_FORMAT_FLAG)
+                seekable_ = *static_cast<int*>(property->data) != 0;
+            else if (!strcmp(property->name, "media-title") && property->format == MPV_FORMAT_STRING) {
+                const char* title = *static_cast<char**>(property->data);
+                mediaTitle_ = title ? title : "";
+            }
+        } else if (ev->event_id == MPV_EVENT_SEEK) {
+            seeking_ = true;
+        } else if (ev->event_id == MPV_EVENT_LOG_MESSAGE) {
             auto* msg = static_cast<mpv_event_log_message*>(ev->data);
             fprintf(stderr, "[mpv/%s] %s", msg->prefix, msg->text);
         } else if (ev->event_id == MPV_EVENT_SET_PROPERTY_REPLY && ev->error < 0) {
@@ -191,6 +217,7 @@ void MpvPlayer::processEvents()
 
 bool MpvPlayer::open(const std::string& path, bool withAudio)
 {
+    title_.clear();
     retries_ = 0;
     retry_ = [this, path, withAudio] { loadPath(path, withAudio); };
     return loadPath(path, withAudio);
@@ -198,6 +225,7 @@ bool MpvPlayer::open(const std::string& path, bool withAudio)
 
 bool MpvPlayer::openResolved(const ResolvedMedia& media, bool withAudio)
 {
+    title_ = media.title;
     retries_ = 0;
     // The last attempt lets mpv's ytdl hook resolve the original address again,
     // in case the signed stream addresses have expired.
@@ -217,6 +245,9 @@ bool MpvPlayer::loadPath(const std::string& path, bool withAudio)
     mpv_set_property_async(mpv_, 0, "aid", MPV_FORMAT_STRING, &aid);
     const char* cmd[] = {"loadfile", path.c_str(), nullptr};
     path_ = path;
+    position_ = duration_ = 0;
+    seekable_ = seeking_ = false;
+    mediaTitle_.clear();
     lastError_.clear();
     playbackState_ = "loading";
     loadEntry_ = -1;
@@ -258,6 +289,9 @@ bool MpvPlayer::loadResolved(const ResolvedMedia& media, bool withAudio)
     command.format = MPV_FORMAT_NODE_ARRAY;
     command.u.list = &arguments;
     path_ = media.source;
+    position_ = duration_ = 0;
+    seekable_ = seeking_ = false;
+    mediaTitle_.clear();
     lastError_.clear();
     playbackState_ = "loading";
     loadEntry_ = -1;
@@ -276,6 +310,10 @@ void MpvPlayer::stop()
         mpv_command_async(mpv_, 0, cmd);
     }
     path_.clear();
+    title_.clear();
+    mediaTitle_.clear();
+    position_ = duration_ = 0;
+    seekable_ = seeking_ = false;
     lastError_.clear();
     playbackState_ = "idle";
     loadEntry_ = -1;
@@ -296,6 +334,32 @@ void MpvPlayer::setVolume(int volume)
         return;
     double v = volume;
     mpv_set_property_async(mpv_, 0, "volume", MPV_FORMAT_DOUBLE, &v);
+}
+
+MediaInfo MpvPlayer::mediaInfo() const
+{
+    MediaInfo info{path_, title_.empty() ? mediaTitle_ : title_, position_, duration_, paused_, seekable_, seekSerial_, playbackState_};
+    info.revision = loadRequest_;
+    return info;
+}
+
+void MpvPlayer::seek(double seconds, bool absolute)
+{
+    if (!mpv_ || !seekable_ || path_.empty() || !std::isfinite(seconds)) return;
+    if (absolute && seconds < 0) return;
+    if (absolute && duration_ > 0 && seconds > duration_) return;
+    mpv_node items[3]{};
+    items[0].format = MPV_FORMAT_STRING;
+    items[0].u.string = const_cast<char*>("seek");
+    items[1].format = MPV_FORMAT_DOUBLE;
+    items[1].u.double_ = seconds;
+    items[2].format = MPV_FORMAT_STRING;
+    items[2].u.string = const_cast<char*>(absolute ? "absolute+exact" : "relative+exact");
+    mpv_node_list list{3, items, nullptr};
+    mpv_node command{};
+    command.format = MPV_FORMAT_NODE_ARRAY;
+    command.u.list = &list;
+    mpv_command_node_async(mpv_, 0, &command);
 }
 
 void MpvPlayer::setMute(bool mute)

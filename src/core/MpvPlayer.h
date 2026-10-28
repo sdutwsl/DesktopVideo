@@ -17,6 +17,17 @@ struct OnlineOptions {
 
 struct ResolvedMedia {
     std::string source, video, audio, userAgent, referrer;
+    std::string title = {};
+};
+
+struct MediaInfo {
+    std::string source, title;
+    double position = 0, duration = 0;
+    bool paused = false, seekable = false;
+    uint64_t seekSerial = 0;
+    std::string playback = "idle";
+    std::string monitor = {};
+    uint64_t revision = 0;
 };
 
 // Thin wrapper around one libmpv core. Video goes either into a native window
@@ -46,6 +57,8 @@ public:
     bool openResolved(const ResolvedMedia& media, bool withAudio);
     void stop();
     void setPaused(bool paused);
+    void seek(double seconds, bool absolute);
+    MediaInfo mediaInfo() const;
 
     void setVolume(int volume);   // 0..100
     void setMute(bool mute);
@@ -69,6 +82,10 @@ private:
     std::string path_;
     std::string lastError_;
     std::string playbackState_ = "idle";
+    std::string title_, mediaTitle_;
+    double position_ = 0, duration_ = 0;
+    bool paused_ = false, seekable_ = false, seeking_ = false;
+    uint64_t seekSerial_ = 0;
     std::mutex wakeupMutex_;
     std::function<void()> wakeup_;
 };

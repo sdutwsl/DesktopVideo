@@ -14,11 +14,13 @@ class Playback extends EventEmitter {
     this.list = list;
     this.state = { phase: 'connecting', message: '正在启动播放…', title: '', playerReady: false,
       monitors: [], volume: 50, mute: false, paused: false, canCancel: false, startedAt: 0,
-      playlist: null, playlistIndex: -1, source: '' };
+      playlist: null, playlistIndex: -1, source: '', monitor: '' };
     this.playlistCache = new Map();
     this.listTask = null;
     this.job = null;
     this.polling = false;
+    this.pollAgain = false;
+    this.statusRevision = 0;
     this.closed = false;
     this.commands = Promise.resolve();
   }
@@ -37,6 +39,8 @@ class Playback extends EventEmitter {
     Object.assign(this.state, value);
     this.emit('state', { ...this.state });
   }
+
+  invalidateStatus() { this.statusRevision++; }
 
   stopPlaylist() {
     this.listTask?.controller.abort();
@@ -144,7 +148,7 @@ class Playback extends EventEmitter {
     const entryIndex = existing?.entries.findIndex(entry => entry.source === (youtubeVideo(source) || source)) ?? -1;
     const sameCollection = collection && this.listTask?.id === new URL(collection).searchParams.get('list');
     if (!sameCollection && entryIndex < 0) this.stopPlaylist();
-    this.update({ phase: httpUrl(source) ? 'resolving' : 'loading', canCancel: true, startedAt: Date.now(), source,
+    this.update({ phase: httpUrl(source) ? 'resolving' : 'loading', canCancel: true, startedAt: Date.now(), source, monitor,
       playlist: entryIndex >= 0 || sameCollection ? existing : null, playlistIndex: entryIndex,
       playlistLoading: Boolean(this.listTask && this.state.playlistLoading), playlistError: '',
       message: httpUrl(source) ? '解析中 · 正在获取视频信息和播放地址…' : '加载中 · 正在打开本地视频…', title: '' });
@@ -202,13 +206,14 @@ class Playback extends EventEmitter {
   }
 
   async poll() {
-    if (this.polling || !this.state.playerReady || this.closed) return;
+    if (!this.state.playerReady || this.closed) return;
+    if (this.polling) { this.pollAgain = true; return; }
     this.polling = true;
     // A status request already in flight may describe the preceding video.
-    const polledJob = this.job, accepted = polledJob?.accepted;
+    const polledJob = this.job, accepted = polledJob?.accepted, revision = this.statusRevision;
     try {
       const status = await this.player.request('status');
-      if (this.job !== polledJob || this.closed) return;
+      if (this.job !== polledJob || this.closed || revision !== this.statusRevision) return;
       this.update({ monitors: status.monitors, volume: status.volume, mute: status.mute, paused: status.paused });
       const job = this.job;
       if (job && !accepted) return;
@@ -231,11 +236,16 @@ class Playback extends EventEmitter {
         this.update({ phase: 'loading', message: '加载中 · 播放器正在缓冲视频…' });
       } else if (!job && playback === 'playing' && this.state.phase === 'loading') {
         this.update({ phase: status.paused ? 'paused' : 'playing', message: status.paused ? '已暂停' : '播放中' });
+      } else if (!job && playback === 'idle' && ['playing', 'paused', 'loading'].includes(this.state.phase)) {
+        this.update({ phase: 'ready', canCancel: false, message: '已停止播放，可以重新选择视频' });
       }
     } catch (error) {
       if (this.job !== polledJob || this.closed || !this.state.playerReady) return;
       this.playerFailed('播放插件失去响应：' + safeError(error.message));
-    } finally { this.polling = false; }
+    } finally {
+      this.polling = false;
+      if (this.pollAgain && !this.closed) { this.pollAgain = false; void this.poll(); }
+    }
   }
 
   close() { this.closed = true; this.connection?.abort(); this.job?.controller.abort(); this.stopPlaylist(); this.job = null; }

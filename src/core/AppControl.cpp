@@ -25,6 +25,7 @@ AppControl::AppControl(Wallpaper& wallpaper, Config& config, std::function<void(
 
 std::string AppControl::state() const
 {
+    const auto media = wallpaper_.mediaInfo();
     std::ostringstream out;
     out << "{\"ok\":true,\"paused\":" << (wallpaper_.userPaused() ? "true" : "false")
         << ",\"version\":" << quote(MURALOP_VERSION)
@@ -32,6 +33,7 @@ std::string AppControl::state() const
         << ",\"volume\":" << wallpaper_.volume()
         << ",\"video\":" << quote(wallpaper_.videoFor(""))
         << ",\"playback\":" << quote(wallpaper_.playbackState())
+        << ",\"mediaPlayback\":" << quote(media.playback)
         << ",\"error\":" << quote(wallpaper_.lastError()) << ",\"monitors\":[";
     bool first = true;
     for (const auto& m : wallpaper_.monitors()) {
@@ -59,7 +61,19 @@ std::string AppControl::execute(const std::string& request)
             start = end + 1;
         }
         const auto& cmd = args[0];
-        if (cmd == "status" && args.size() == 1) {}
+        if (cmd == "events" && args.size() == 1) {
+            std::string result = "{\"ok\":true,\"events\":[";
+            for (const auto& [action, value] : events_) {
+                if (result.back() != '[') result += ',';
+                result += "{\"action\":" + quote(action) + ",\"value\":" + quote(value) + '}';
+            }
+            events_.clear();
+            return result + "]}";
+        } else if (cmd == "media-context" && args.size() == 5
+                   && (args[2] == "0" || args[2] == "1") && (args[3] == "0" || args[3] == "1")) {
+            if (onMediaContext) onMediaContext(args[1], args[2] == "1", args[3] == "1", args[4]);
+            return "{\"ok\":true}";
+        } else if (cmd == "status" && args.size() == 1) {}
         else if (cmd == "set" && args.size() == 3 && !args[1].empty()) {
             if (!args[2].empty()) {
                 bool found = false;
@@ -67,7 +81,7 @@ std::string AppControl::execute(const std::string& request)
                 if (!found) throw std::runtime_error("Monitor is no longer connected");
             }
             wallpaper_.setVideo(args[1], args[2]);
-        } else if (cmd == "play-resolved" && args.size() == 7) {
+        } else if (cmd == "play-resolved" && (args.size() == 7 || args.size() == 8)) {
             auto online = [](const std::string& url) { return url.starts_with("https://") || url.starts_with("http://"); };
             if (!online(args[1]) || !online(args[2]) || (!args[3].empty() && !online(args[3])))
                 throw std::runtime_error("Resolved media must use HTTP or HTTPS");
@@ -76,8 +90,10 @@ std::string AppControl::execute(const std::string& request)
                 for (const auto& monitor : wallpaper_.monitors()) found |= monitor.id == args[6];
                 if (!found) throw std::runtime_error("Monitor is no longer connected");
             }
-            wallpaper_.setResolvedVideo({args[1], args[2], args[3], args[4], args[5]}, args[6]);
+            wallpaper_.setResolvedVideo({args[1], args[2], args[3], args[4], args[5], args.size() == 8 ? args[7] : ""}, args[6]);
         } else if (cmd == "stop" && args.size() <= 2) wallpaper_.stopPlayback(args.size() == 2 ? args[1] : "");
+        else if (cmd == "stop-all" && args.size() == 1) wallpaper_.stop();
+        else if (cmd == "play" && args.size() == 1) wallpaper_.play();
         else if (cmd == "clear" && args.size() == 2) wallpaper_.clearOverride(args[1]);
         else if ((cmd == "pause" || cmd == "resume") && args.size() == 1) wallpaper_.setUserPaused(cmd == "pause");
         else if ((cmd == "mute" || cmd == "unmute") && args.size() == 1) wallpaper_.setMute(cmd == "mute");
@@ -101,5 +117,11 @@ std::string AppControl::execute(const std::string& request)
     } catch (const std::exception& e) {
         return "{\"ok\":false,\"error\":" + quote(e.what()) + '}';
     }
+}
+
+void AppControl::postEvent(std::string action, std::string value)
+{
+    if (events_.size() >= 64) events_.pop_front();
+    events_.emplace_back(std::move(action), std::move(value));
 }
 } // namespace muralop
