@@ -6,6 +6,7 @@ if(CMAKE_HOST_APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
 endif()
 # The single version number: the Nix package reads it from here, and release tags must be v<VERSION>.
 project(Muralop VERSION 3.0.0 LANGUAGES C CXX)
+add_compile_definitions("MURALOP_VERSION=\"${PROJECT_VERSION}\"")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,6 +37,9 @@ add_library(muralop_core STATIC
 target_include_directories(muralop_core PUBLIC src)
 target_link_libraries(muralop_core PUBLIC Mpv::Mpv)
 target_compile_options(muralop_core PUBLIC -Wall -Wextra)
+set_target_properties(muralop_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+option(MURALOP_BUILD_NODE_PLUGIN "Build the Electron Node-API playback plugin" OFF)
 
 if(BUILD_TESTING AND NOT APPLE)
     add_executable(muralop_control_test
@@ -221,4 +225,45 @@ else()
     set(CPACK_RPM_PACKAGE_RELEASE_DIST ON)
     set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION /usr/share/applications)
     include(CPack)
+endif()
+
+# ---- Electron playback plugin (stable Node-API, no V8/Electron ABI dependency) --
+if(MURALOP_BUILD_NODE_PLUGIN)
+    if(APPLE)
+        message(FATAL_ERROR "The Electron playback plugin currently supports Linux/Windows only")
+    endif()
+    find_path(NODE_INCLUDE_DIR node_api.h PATH_SUFFIXES node REQUIRED)
+    find_package(Threads REQUIRED)
+    add_library(muralop_player MODULE src/node/PlayerAddon.cpp)
+    target_include_directories(muralop_player PRIVATE "${NODE_INCLUDE_DIR}")
+    target_compile_definitions(muralop_player PRIVATE NAPI_VERSION=8)
+    target_link_libraries(muralop_player PRIVATE muralop_core Threads::Threads)
+    set_target_properties(muralop_player PROPERTIES
+        PREFIX "" SUFFIX ".node" OUTPUT_NAME "muralop"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/desktop"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/desktop")
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/desktop/package.json" MURALOP_DESKTOP_METADATA)
+    string(JSON MURALOP_DESKTOP_METADATA SET "${MURALOP_DESKTOP_METADATA}" version "\"${PROJECT_VERSION}\"")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/desktop")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/desktop/package.json" "${MURALOP_DESKTOP_METADATA}\n")
+    if(WIN32)
+        target_sources(muralop_player PRIVATE src/win/DesktopSurface.cpp)
+        target_compile_definitions(muralop_player PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+        target_link_libraries(muralop_player PRIVATE user32 gdi32 shell32 wtsapi32)
+        target_link_options(muralop_player PRIVATE -static -static-libgcc -static-libstdc++)
+        if(Mpv_DLL)
+            add_custom_command(TARGET muralop_player POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${Mpv_DLL}" "$<TARGET_FILE_DIR:muralop_player>"
+                COMMENT "Copying libmpv next to the Node playback plugin")
+        endif()
+    else()
+        target_sources(muralop_player PRIVATE
+            src/wayland/EventLoop.cpp src/wayland/LayerSurface.cpp
+            src/wayland/Session.cpp src/wayland/WaylandDisplay.cpp ${PROTOCOL_SOURCES})
+        target_include_directories(muralop_player PRIVATE src/wayland "${PROTOCOL_OUT}")
+        target_link_libraries(muralop_player PRIVATE PkgConfig::WAYLAND PkgConfig::SDBUS)
+        install(TARGETS muralop_player LIBRARY DESTINATION "${CMAKE_INSTALL_DATADIR}/muralop/desktop")
+        install(FILES "${CMAKE_CURRENT_BINARY_DIR}/desktop/package.json"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/muralop/desktop")
+    endif()
 endif()

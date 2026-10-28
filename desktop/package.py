@@ -1,5 +1,6 @@
 """Bundle Electron, the player plugin, session importer, yt-dlp and Deno."""
 import argparse
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -13,28 +14,34 @@ from package import download
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--backend-dir", required=True)
+    parser.add_argument("--player-dir", required=True, help="Directory containing muralop.node and generated package.json")
     args = parser.parse_args()
     suffix = ".exe" if sys.platform == "win32" else ""
+    player = Path(args.player_dir)
+    if not (player / "muralop.node").is_file():
+        parser.error("muralop.node is missing; build with -DMURALOP_BUILD_NODE_PLUGIN=ON first")
+    metadata = json.loads((player / "package.json").read_text(encoding="utf-8"))
     executable = Path(subprocess.check_output(["node", "-p", "require('electron')"], cwd=ROOT / "desktop", text=True).strip())
     bundle = ROOT / "dist/gui/muralop-ui"
-    shutil.copytree(executable.parent, bundle, dirs_exist_ok=True)
+    if bundle.exists():
+        shutil.rmtree(bundle)
+    shutil.copytree(executable.parent, bundle)
     (bundle / executable.name).rename(bundle / ("muralop-ui" + suffix))
     app_dir = bundle / "resources/app"
     app_dir.mkdir(parents=True, exist_ok=True)
     for pattern in ("*.cjs", "*.html", "*.css", "package.json"):
         for source in (ROOT / "desktop").glob(pattern):
             shutil.copy2(source, app_dir)
+    (app_dir / "package.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    shutil.copy2(player / "muralop.node", app_dir)
     work = ROOT / "build-electron"
     work.mkdir(exist_ok=True)
     subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile",
         "--name", "muralop-session", "--distpath", str(work / "session"), "--workpath", str(work / "build"),
         "--specpath", str(work), str(ROOT / "gui/session.py")], check=True)
     shutil.copy2(work / "session" / ("muralop-session" + suffix), bundle)
-    backend = Path(args.backend_dir)
-    shutil.copy2(backend / ("muralop" + suffix), bundle)
     if sys.platform == "win32":
-        shutil.copy2(backend / "libmpv-2.dll", bundle)
+        shutil.copy2(player / "libmpv-2.dll", bundle)
     extractors = {
         "win32": ("yt-dlp.exe", "33121d192d706e62f684a06f80918e3f3a8ba52ac3a65213b6951c39c7d9f555"),
         "linux": ("yt-dlp_linux", "d8bd33fca9d5b23bd5b9952b3fca36db5c46331933fda9f598a3da14ce2c243f"),

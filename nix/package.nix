@@ -16,6 +16,7 @@
   fetchFromGitHub,
   deno,
   electron,
+  nodejs,
   makeWrapper,
 }:
 
@@ -53,6 +54,7 @@ stdenv.mkDerivation {
       ../data
       ../src/core
       ../src/wayland
+      ../src/node
       ../tests
       ../gui
       ../desktop
@@ -65,6 +67,7 @@ stdenv.mkDerivation {
     pkg-config
     wayland-scanner
     makeWrapper
+    nodejs
   ];
 
   buildInputs = [
@@ -76,16 +79,21 @@ stdenv.mkDerivation {
     systemdLibs # sd-bus, required by sdbus-cpp
   ];
 
+  cmakeFlags = [
+    "-DMURALOP_BUILD_NODE_PLUGIN=ON"
+    "-DNODE_INCLUDE_DIR=${nodejs}/include/node"
+  ];
   doCheck = true;
   postInstall = ''
     mkdir -p $out/share/muralop/desktop
-    cp $src/desktop/{*.cjs,*.html,*.css,package.json} $out/share/muralop/desktop/
+    cp $src/desktop/{*.cjs,*.html,*.css} $out/share/muralop/desktop/
+    cp desktop/package.json $out/share/muralop/desktop/
     cp $src/gui/session.py $out/share/muralop/
   '';
   postFixup = ''
     makeWrapper ${electron}/bin/electron $out/bin/muralop-ui \
       --add-flags "$out/share/muralop/desktop" \
-      --add-flags "--backend $out/bin/muralop" \
+      --set MURALOP_PLAYER_PLUGIN $out/share/muralop/desktop/muralop.node \
       --prefix PATH : ${lib.makeBinPath [ youtubeDlp deno ]} \
       --set MURALOP_YTDLP ${youtubeDlp}/bin/yt-dlp \
       --set MURALOP_SESSION_HELPER $out/bin/muralop-session

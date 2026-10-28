@@ -2,7 +2,7 @@
 
 [![build](https://github.com/sdutwsl/Muralop/actions/workflows/build.yml/badge.svg)](https://github.com/sdutwsl/Muralop/actions/workflows/build.yml)
 
-把视频当作桌面壁纸播放。一套 C++ 核心（libmpv），三个原生外壳：
+把视频当作桌面壁纸播放。Linux / Windows 主界面通过原生 Node 插件使用 C++/libmpv 核心；各平台的壁纸层如下（本次插件重构待构建和实播验证）：
 
 | 平台 | 壁纸层 | 托盘 | 状态 |
 |---|---|---|---|
@@ -76,7 +76,7 @@ cmake -S . -B build -G Ninja && ninja -C build
 ### 使用
 
 ```sh
-muralop                    # 启动守护进程（托盘里选视频）
+muralop                    # 完整包打开应用；仅安装原生程序时启动独立播放器
 muralop ~/Videos/a.mp4     # 启动并使用该视频
 muralop set a.mp4 DP-2     # 只给 DP-2 换视频
 muralop ui                 # 在终端前台打开主界面，Ctrl+C 可退出
@@ -84,7 +84,7 @@ muralop pause | resume | mute | unmute | volume 40 | monitors | quit
 MURALOP_DEBUG=1 muralop         # 打印渲染和 mpv 的详细日志
 ```
 
-守护进程在 session bus 上注册 `org.muralop.Daemon`，也可以直接用 `busctl --user call ...` 控制；
+应用的播放插件和独立播放器均可在 session bus 上注册 `org.muralop.Daemon`，也可以直接用 `busctl --user call ...` 控制；
 Sway 用户可以在 `swayidle` 的 lock/unlock 钩子里调 `muralop pause/resume`。
 
 开机自启：把 `data/muralop.desktop` 复制到 `~/.config/autostart/`。
@@ -119,18 +119,18 @@ v3.0.0 起，[Releases](https://github.com/sdutwsl/Muralop/releases) 里每个�
 
 - **安装包** `muralop-v*-windows-<arch>-setup.exe`：装到 `%LOCALAPPDATA%\Programs\Muralop`，不需要管理员权限；有开始菜单快捷方式，可选开机自启，可在“设置 → 应用”里卸载。安装和卸载前会让正在运行的壁纸先正常退出。
 - **便携版** `muralop-v*-windows-<arch>-portable.zip`：解压出 `Muralop` 文件夹直接运行。文件夹里的 `config.ini` 让设置保存在它旁边，不写 `%APPDATA%`，也不碰注册表；删掉它就改用 `%APPDATA%\Muralop\config.ini`。
-- **YouTube 主界面** `muralop-v*-windows-x64-gui.zip`：解压后运行 `muralop-ui.exe`；包含 x64 后端、libmpv、yt-dlp 和 Deno。ARM64 主界面尚未打包。
+- **主界面** `muralop-v*-windows-x64-gui.zip`：解压后运行 `muralop-ui.exe`；包含 x64 原生 Node 播放插件、libmpv、yt-dlp 和 Deno。ARM64 主界面尚未打包。
 
 master 每次提交的构建在 [Actions](https://github.com/sdutwsl/Muralop/actions/workflows/build.yml) 的 `windows-x64` / `windows-arm64` 产物里。安装包没有代码签名，第一次运行 SmartScreen 会提示，点“更多信息 → 仍要运行”。
 
 运行后右键托盘图标选择视频；把视频文件拖到 exe 上也可以。
 
-## YouTube 主界面（Linux / Windows x64）
+## 主界面（Linux / Windows）
 
-主界面基于 Electron，壁纸播放核心作为独立进程接入；解析视频时界面保持可操作，可随时取消。
-Linux 可通过 Nix 包中的 `muralop-ui` 启动；也可在 Ubuntu 26.04 下载 `muralop-v*-linux-gui-x64.tar.gz`，解压后运行 `muralop-ui/muralop-ui`。Linux GUI 归档内的后端依赖 Ubuntu 26.04 的 libmpv、Wayland、EGL 和 sdbus-c++ 2；Nix 包会管理这些依赖。Ubuntu 默认限制非特权用户命名空间，解压后需执行一次 `sudo chown root:root muralop-ui/chrome-sandbox && sudo chmod 4755 muralop-ui/chrome-sandbox`，否则 Chromium 沙箱无法启动。Windows 使用上文的 GUI zip。关闭按钮将主界面隐藏到托盘，保留网页和当前任务；最小化或再次打开不会重新加载网页。真正退出界面可使用界面底部的“退出界面”按钮，壁纸继续运行。
+应用基于 Electron，通过 `muralop.node` 调用现有 C++/libmpv 播放能力，统一管理窗口、托盘和退出。插件在应用拥有的 utility process 中加载，渲染运行于专用线程；驱动崩溃时窗口保留，可重启播放。解析视频时界面保持可操作，可随时取消（本次重构待构建和实播验证）。
+Linux 可通过 Nix 包中的 `muralop-ui` 启动；也可在 Ubuntu 26.04 下载 `muralop-v*-linux-gui-x64.tar.gz`，解压后运行 `muralop-ui/muralop-ui`。Linux GUI 归档内的播放插件依赖 Ubuntu 26.04 的 libmpv、Wayland、EGL 和 sdbus-c++ 2；Nix 包会管理这些依赖。Ubuntu 默认限制非特权用户命名空间，解压后需执行一次 `sudo chown root:root muralop-ui/chrome-sandbox && sudo chmod 4755 muralop-ui/chrome-sandbox`，否则 Chromium 沙箱无法启动。Windows 使用上文的 GUI zip。关闭按钮将主界面隐藏到托盘，保留网页和当前任务；最小化或再次打开不会重新加载网页。使用托盘中的“退出”同时结束壁纸播放和主界面。
 
-在内嵌网页浏览 YouTube，点击视频可直接设为桌面壁纸；也可以粘贴视频网址，给不同显示器指定不同视频。点击后界面和窗口标题依次显示 **解析中**、**加载中**、**播放中**，失败时显示原因。合集会列出全部可用视频，可以选择其中任意视频播放。YouTube 可能要求登录后才能解析：可在内嵌网页直接登录，或从浏览器、`cookies.txt` 导入登录会话。具体操作、Cookie 保存位置和开发运行方式见 [主界面说明](desktop/README.md)。macOS 目前没有这个主界面。
+在内嵌网页浏览支持的视频平台，点击视频可直接设为桌面壁纸；也可以粘贴视频网址，给不同显示器指定不同视频。点击后界面和窗口标题依次显示 **解析中**、**加载中**、**播放中**，失败时显示原因。合集会列出全部可用视频，可以选择其中任意视频播放。YouTube 可能要求登录后才能解析：可在内嵌网页直接登录，或从浏览器、`cookies.txt` 导入登录会话。具体操作、Cookie 保存位置和开发运行方式见 [主界面说明](desktop/README.md)。macOS 目前没有这个主界面。
 
 ### 构建
 
@@ -181,9 +181,45 @@ pause_when_locked=1
 audio_monitor=DP-1             # 哪个显示器出声，留空用主屏
 ```
 
+## 版本与 Fix / Feature 清单
+
+当前源码版本为 **3.0.0**，以 `CMakeLists.txt` 的 `project(Muralop VERSION x.y.z)` 为准。版本采用 `主版本.次版本.修订版本`：不兼容变更升级主版本，新增功能升级次版本，仅修复问题升级修订版本；纯文档修改不单独升级应用版本。
+
+日常改动先累计在“未发布”中，整理新版本时再确定版本号，将本批条目移入对应版本标题并保留历史记录。提交、推送和正式版本发布是不同操作，不为每次提交自动增加版本号。
+
+### 未发布
+
+#### Feature
+
+- 播放能力改为原生 Node-API 插件，由应用管理启动、渲染线程和退出；保留自动硬解、多屏、锁屏和休眠处理，Nix 及 Windows/Linux 便携包同步携带插件（待构建和实播验证）。
+- 新增“关于与诊断”：统一应用版本、文件标识、运行位置、最近 20 条错误，支持复制诊断信息和清空记录（待界面实测）。
+- 支持切换 YouTube、B站、抖音、TikTok、Vimeo、Dailymotion、Twitch，点击视频直接播放；其他 yt-dlp 站点可粘贴网址解析（待逐站实播验证）。
+- 一次导入浏览器配置或 cookies.txt 中所有已接入平台的登录会话，切换平台无需逐个重新导入；支持从分享文案中提取视频链接。
+- 简化网页区域，移除导航栏、手动“播放当前视频”按钮和预览开关。
+- 调整侧栏分组和播放状态卡，增加三步播放状态、网页骨架屏、慢加载提示、播放指示及控件过渡动效（待界面实测）。
+- 移除原生窗口装饰和网页外框，将顶部收为单行工具栏；通过平台小按钮弹出站点列表，提供窗口拖动、最小化、最大化和隐藏到托盘操作（待界面实测）。
+
+#### Fix
+
+- 将新增播放插件及运行时模块纳入 Git 跟踪，修复本地 `nix run . -- ui` 因 flake 源码缺少 `src/node` 而无法求值的问题（完整构建待验证）。
+- 保留窗口隐藏、最小化前的网页与播放任务，恢复窗口时沿用原网页。
+- 完整应用统一由 Electron 提供一个托盘，播放插件不再创建第二个托盘（待运行验证）。
+- 完整包的默认启动和传入视频文件统一进入同一应用实例，保留命令行控制，避免额外启动独立播放器（待运行验证）。
+- 保留 YouTube 合集参数，读取完整可用视频列表，支持选择和切换条目。
+- 优化合集首播等待：逐条读取并追加列表，先解析所选视频或首个可用视频，后台补齐其余条目；完整列表缓存 10 分钟，减少重复请求（待性能实测）。
+- 防止旧请求覆盖新视频的解析、加载状态；网页错误与播放状态分别显示。
+- 统一为托盘中的一个“退出”入口，同时结束播放插件、窗口、网页和解析任务；退出会取消正在启动和解析的任务，插件停止超时后终止其宿主进程（待运行验证）。
+- 将 Wayland 壁纸窗口标记为 KWin 可识别的桌面类型，使其参与桌面预览选择（待 KDE 实测）。
+- 播放插件崩溃或失去响应时保留窗口和托盘，显示原因并支持重启播放；移除每次状态查询启动 RPC 子进程的调用链（待运行验证）。
+- 解锁或休眠恢复时重置 Wayland 帧回调并主动重绘当前画面，处理有音频但画面不恢复的情况，保留硬解和播放进度（待锁屏恢复实测）。
+
+#### 已知问题
+
+- 已观察到 Intel iHD 的 AV1 硬解同步路径崩溃，尚未解决；保留原有自动硬解策略。
+
 ## 发布
 
-版本号只在 `CMakeLists.txt` 的 `project(Muralop VERSION x.y.z)` 里写一次，Nix 包和 Windows exe 的版本信息都从这里取。发布新版本：
+Nix 包和 Windows exe 的版本信息从 `CMakeLists.txt` 获取，Electron 包元数据随应用版本同步。仅在明确要求发布时整理版本清单、调整版本并创建 tag：
 
 ```sh
 # 先改 CMakeLists.txt 里的版本号并提交
@@ -194,32 +230,50 @@ CI 跑完全部构建后自动创建 GitHub Release，附上 Windows x64 / ARM64
 
 ## 开发与构建流程
 
-主界面和播放后端是两个独立进程，打包时必须来自同一份源码：
+Muralop 按一个应用打包：Electron 管理窗口、网页、托盘和生命周期，原生 Node 插件承接壁纸播放。应用文件和插件必须来自同一份源码，版本统一读取 `CMakeLists.txt`；启动时检查包内版本是否一致。
 
 | 部分 | 修改位置 | 构建或打包入口 | 产物 |
 |---|---|---|---|
-| 播放核心、原生窗口和托盘 | `src/core/`、`src/wayland/`、`src/win/`、`src/mac/` | `CMakeLists.txt`，CMake + Ninja | `muralop` / `muralop.exe` / `Muralop.app` |
-| Electron 主界面、网页、视频解析 | `desktop/` | Nix 的 `nix/package.nix` 或便携包的 `desktop/package.py` | `muralop-ui` / `muralop-ui.exe` |
+| 原生 Node 播放插件 | `src/node/`、`src/core/`、`src/wayland/`、`src/win/` | CMake 的 `MURALOP_BUILD_NODE_PLUGIN=ON` | `build/desktop/muralop.node`、生成的 `package.json` |
+| 应用窗口、网页、托盘、解析与诊断 | `desktop/` | `nix/package.nix` 或 `desktop/package.py` | `muralop-ui` / `muralop-ui.exe` |
 | 浏览器登录会话导入 | `gui/session.py` | Nix Python 包装器或 PyInstaller | `muralop-session` |
+| 独立原生播放器与命令行 | `src/core/`、平台目录 | CMake + Ninja | `muralop` / `muralop.exe` / `Muralop.app` |
 
-当前主界面入口是 `desktop/main.cjs`。`desktop/` 的 CJS、HTML、CSS 直接随包复制，没有 `npm run build` 步骤；`gui/main.py` 是旧 Qt 界面，修改它不会改变当前发布的主界面。
+应用入口为 `desktop/main.cjs`。CJS、HTML、CSS 直接复制进包，没有 `npm run build`。`desktop/player-host.cjs` 在 Electron 的 utility process 中加载 `.node`，插件内部将命令交给渲染线程执行；界面不再启动 `muralop --background` 或 `muralop rpc`。独立原生播放器仍用于不带 Electron 的发行包，macOS 继续使用原生外壳。
 
-**Nix 构建链路：** `flake.nix` → `nix/package.nix` → CMake 编译后端 → 复制 `desktop/` 到包内 → 生成 `muralop-ui` 启动包装器。包装器指定同一个包里的后端，并配置 yt-dlp、Deno 和会话导入工具。只改 Electron 界面，也需要让这些源码进入新的包。
+**Nix 构建链路：** `flake.nix` → `nix/package.nix` → CMake 编译 `.node` → 安装 `desktop/` 源码和生成的版本元数据 → 包装 Electron、yt-dlp、Deno、会话导入工具。包装器指定同一个包内的插件；完整包的 `muralop` 默认入口转入这个应用，`nix run . -- ui` 也打开同一个入口。应用改动必须进入该包的源码集合，不能向消费仓库添加临时补丁。
 
-**便携包构建链路：** `.github/workflows/build.yml` 先构建 Windows / Ubuntu 后端，GUI 任务再取得对应的后端产物，运行 `python desktop/package.py --backend-dir backend`。该脚本将 Electron、`desktop/` 源码、后端、会话导入工具、yt-dlp 和 Deno 组装到 `dist/gui/muralop-ui/`；Windows 还包含 `libmpv-2.dll`，最后由 CI 归档成 zip 或 tar.gz。
+**便携包构建链路：** `.github/workflows/build.yml` 先在 Ubuntu / Windows 构建中启用 `MURALOP_BUILD_NODE_PLUGIN`，GUI 任务取得 `.node` 和生成的 `package.json`，运行 `python desktop/package.py --player-dir player`。脚本将 Electron、应用源码、播放插件、会话导入工具、yt-dlp 和 Deno 组装进 `dist/gui/muralop-ui/`；Windows 同时包含 `libmpv-2.dll`，最终归档为 zip 或 tar.gz。GUI 包无需单独的 `muralop` 播放程序。
 
-完成修复后，将实际修改的源码和相关打包文件一起提交，再推送到 `origin/master`。推送会触发上述 CI，生成各平台构建产物；日常修复无需打版本 tag。交付时给出已推送的提交号，不能把仅存在于工作区或本地提交中的修改当成已经交付。
+本地开发使用与当前平台对应的 Node 头文件和 libmpv；Linux 还需前述 Wayland 依赖。在 Nix 开发环境中：
 
 ```sh
+nix develop
+cmake -S . -B build -G Ninja -DMURALOP_BUILD_NODE_PLUGIN=ON \
+  -DNODE_INCLUDE_DIR="$(node -p "require('path').resolve(process.execPath, '../../include/node')")"
+cmake --build build --target muralop_player
+npm ci --prefix desktop
+npm start --prefix desktop -- --player-plugin "$PWD/build/desktop/muralop.node"
+```
+
+这里使用稳定的 Node-API v8，不直接依赖 V8 接口；Windows 从当前 Electron 可执行文件解析 Node-API 符号。加载和崩溃隔离使用 [Electron utilityProcess](https://www.electronjs.org/docs/latest/api/utility-process)。默认只做源码修改，不主动执行上述构建、测试或发布命令。
+
+完成修改后，同步更新上面的 Fix / Feature 清单，可以创建本地提交。新增源码必须加入 Git 跟踪，否则本地 Git flake 的 `nix run .` 会遗漏这些文件。每次推送仍需当次明确要求；允许本地提交不代表允许推送。明确要求推送后，将实际修改的源码、相关打包文件和变更清单完整提交，再推送到 `origin/master`，并给出提交号。推送会触发上述 CI，生成各平台构建产物；日常修复无需打版本 tag。
+
+```sh
+# 修改完成后可创建本地提交
 git add -p
 # 新增文件需另用 git add 文件路径加入提交
 git commit -m "说明本次修复"
+# 仅在当次明确要求推送时执行
 git push origin master
 ```
 
 ## 代码结构
 
 ```
+src/node/       Node-API 播放插件、专用渲染线程与平台生命周期
+desktop/        Electron 应用、浏览与解析、托盘、诊断、插件宿主和便携打包
 src/core/       平台无关：libmpv 封装、配置、多屏控制器、菜单模型
 src/wayland/    layer-shell 表面 + EGL 渲染、事件循环、SNI 托盘、D-Bus 会话事件
 src/win/        WorkerW 表面、Shell_NotifyIcon 托盘、锁屏检测、NSIS 安装脚本

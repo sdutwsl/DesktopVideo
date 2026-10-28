@@ -1,24 +1,73 @@
 const $ = id => document.getElementById(id);
+const setText = (id, value) => {
+  value = String(value ?? '');
+  if ($(id).textContent !== value) $(id).textContent = value;
+};
 const invoke = (action, value) => window.muralop.invoke(action, value).catch(error => {
-  $('message').textContent = error.message;
+  setText('message', error.message);
 });
-let state = {}, initialized = false, playlistKey = '';
+let state = {}, initialized = false, playlistKey = '', lastPhase = '', phaseAnimation;
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const steps = [...document.querySelectorAll('#load-steps li')];
 const labels = { connecting:'连接中', ready:'就绪', resolving:'解析中', loading:'加载中', playing:'播放中', paused:'已暂停', cancelled:'已取消', error:'失败' };
 window.muralop.onState(next => {
   state = { ...state, ...next };
+  document.body.dataset.hidden = state.uiVisible === false;
+  const busy = ['connecting', 'resolving', 'loading'].includes(state.phase);
   $('feedback').dataset.phase = state.phase;
-  $('phase').textContent = labels[state.phase] || state.phase;
-  $('message').textContent = state.message;
-  $('playback-summary').textContent = `${labels[state.phase] || state.phase}${state.title ? ' · ' + state.title : ''}`;
+  $('feedback').setAttribute('aria-busy', busy);
+  $('progress').setAttribute('aria-hidden', !busy);
+  setText('phase', labels[state.phase] || state.phase);
+  if (lastPhase && state.phase !== lastPhase && state.uiVisible !== false && !reduceMotion.matches) {
+    phaseAnimation?.cancel();
+    phaseAnimation = $('phase').animate([{ opacity: .35, transform: 'translateY(3px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 220, easing: 'ease-out' });
+  }
+  lastPhase = state.phase;
+  if (state.diagnostics) {
+    const info = state.diagnostics.application;
+    setText('app-version', info.version);
+    setText('app-fingerprint', info.fingerprint || '—');
+    setText('app-location', info.location);
+    setText('app-plugin', info.plugin);
+    const errorKey = JSON.stringify(state.diagnostics.errors);
+    if ($('recent-errors').dataset.key !== errorKey) {
+      $('recent-errors').dataset.key = errorKey;
+      $('recent-errors').replaceChildren(...state.diagnostics.errors.slice().reverse().map(entry => {
+        const item = document.createElement('li');
+        item.textContent = `${new Date(entry.at).toLocaleString()} · ${entry.category}\n${entry.message}${entry.count > 1 ? `（${entry.count} 次）` : ''}`;
+        return item;
+      }));
+    }
+  }
+  const stage = ['resolving', 'loading', 'playing'].indexOf(state.phase === 'paused' ? 'playing' : state.phase);
+  steps.forEach((step, index) => {
+    step.dataset.state = stage < 0 ? 'pending' : index < stage || stage === 2 ? 'done' : index === stage ? 'active' : 'pending';
+    if (index === stage) step.setAttribute('aria-current', 'step');
+    else step.removeAttribute('aria-current');
+  });
+  setText('message', state.message);
+  $('message').title = state.message || '';
+  setText('playback-summary', `${labels[state.phase] || state.phase}${state.title ? ' · ' + state.title : ''}`);
+  $('playback-summary').title = state.title || state.message || '';
   $('playback-summary').dataset.phase = state.phase;
-  $('cancel').hidden = !state.canCancel;
-  $('play').disabled = !state.backendOnline;
-  $('pause').textContent = state.paused ? '继续' : '暂停';
-  $('mute').textContent = state.mute ? '取消静音' : '静音';
-  for (const id of ['pause','mute','volume','clear']) $(id).disabled = !state.backendOnline;
+  document.querySelector('.now-playing').dataset.phase = state.phase;
+  $('cancel').hidden = !state.canCancel && !state.playlistLoading;
+  setText('cancel', state.canCancel ? '取消' : '停止读取');
+  $('play').disabled = !state.playerReady;
+  setText('pause', state.paused ? '继续' : '暂停');
+  setText('mute', state.mute ? '取消静音' : '静音');
+  $('pause').setAttribute('aria-pressed', Boolean(state.paused));
+  $('mute').setAttribute('aria-pressed', Boolean(state.mute));
+  for (const id of ['pause','mute','volume']) $(id).disabled = !state.playerReady;
+  $('clear').disabled = !state.playerReady || !$('monitor').value;
+  $('connect').disabled = state.phase === 'connecting';
+  $('connect').hidden = Boolean(state.playerReady);
+  setText('connect', state.phase === 'connecting' ? '连接中…' : '重启播放');
+  setText('player-status', state.playerReady ? '播放已就绪' : state.phase === 'connecting' ? '正在启动播放…' : '播放未就绪');
+  $('player-status').dataset.online = Boolean(state.playerReady);
   for (const id of ['import-browser','import-file','clear-session']) $(id).disabled = state.importing;
-  $('import-browser').textContent = state.importing ? '正在导入会话…' : '导入浏览器登录会话';
-  if (document.activeElement !== $('volume')) { $('volume').value = state.volume; $('volume-value').textContent = state.volume; }
+  setText('import-browser', state.importing ? '正在导入全部平台会话…' : '一键导入全部平台会话');
+  if (document.activeElement !== $('volume')) { $('volume').value = state.volume; setText('volume-value', state.volume); }
   const monitors = state.monitors || [];
   const keys = monitors.map(m => m.id).join('\n');
   if ($('monitor').dataset.keys !== keys) {
@@ -27,25 +76,55 @@ window.muralop.onState(next => {
     $('monitor').value = [...$('monitor').options].some(o => o.value === selected) ? selected : '';
     $('monitor').dataset.keys = keys;
   }
+  $('clear').disabled = !state.playerReady || !$('monitor').value;
   if (!initialized && state.settings) {
     for (const id of ['quality','extractor','browser','profile']) $(id).value = state.settings[id] || '';
     $('extractor').placeholder = state.defaultExtractor || '使用内置解析器';
     initialized = true;
   }
-  $('browser-status').textContent = state.browserError || (state.browserLoading ? '正在加载网页…' : '网页已加载');
+  setText('browser-status', state.browserError || (state.browserSlow ? '网页加载较慢，可继续使用左侧控制' : state.browserLoading || !state.browserHasContent ? '正在加载网页…' : '网页已就绪'));
+  $('browser-status').title = $('browser-status').textContent;
   $('browser-status').dataset.error = Boolean(state.browserError);
-  $('retry-browser').hidden = !state.browserError;
-  if (state.sites && !$('site').options.length) $('site').replaceChildren(...state.sites.map(site => new Option(site.name, site.id)));
-  if (state.settings) $('site').value = state.settings.site || 'youtube';
+  const browserState = state.browserHasContent ? 'ready' : state.browserError ? 'error' : 'loading';
+  $('browser-slot').dataset.state = browserState;
+  $('browser-slot').dataset.loading = Boolean(state.browserLoading);
+  $('browser-slot').setAttribute('aria-busy', browserState === 'loading');
+  const browserMeta = document.querySelector('.browser-meta');
+  browserMeta.dataset.loading = Boolean(state.browserLoading);
+  browserMeta.dataset.error = Boolean(state.browserError);
+  browserMeta.dataset.ready = Boolean(state.browserHasContent && !state.browserLoading && !state.browserError);
+  browserMeta.title = $('browser-status').textContent;
+  $('retry-browser').hidden = !state.browserError && !state.browserSlow;
+  $('browser-loader').hidden = browserState === 'error';
+  const siteName = state.sites?.find(site => site.id === state.settings?.site)?.name || '视频站点';
+  setText('site-name', siteName);
+  $('site-switch').title = `切换平台 · 当前 ${siteName}`;
+  setText('window-maximize', state.maximized ? '❐' : '□');
+  $('window-maximize').title = state.maximized ? '还原窗口' : '最大化';
+  $('window-maximize').setAttribute('aria-label', $('window-maximize').title);
+  setText('placeholder-title', browserState === 'error' ? '网页暂时无法显示' : state.browserSlow ? '网页还在加载，请稍候' : `正在打开 ${siteName}`);
+  setText('placeholder-message', state.browserError || '网页就绪后会自动显示，左侧控制可继续使用。');
   const playlist = state.playlist;
-  const key = playlist ? `${playlist.source}\n${playlist.entries.length}` : '';
-  $('playlist-panel').hidden = !playlist;
-  if (playlist && key !== playlistKey) {
-    $('playlist-title').textContent = `${playlist.title} · ${playlist.entries.length} 个视频`;
-    $('playlist-entry').replaceChildren(...playlist.entries.map((entry, index) => new Option(`${entry.index}. ${entry.title}`, String(index))));
+  const key = playlist?.source || '';
+  const reset = key !== playlistKey || $('playlist-entry').options.length > (playlist?.entries.length || 0);
+  $('playlist-panel').hidden = !playlist && !state.playlistLoading && !state.playlistError;
+  $('playlist-panel').dataset.loading = Boolean(state.playlistLoading);
+  setText('playlist-status', state.playlistError ? `列表读取未完成：${state.playlistError}`
+    : state.playlistLoading ? `已获取 ${playlist?.entries.length || 0} 个视频，列表仍在补齐，可以先选先播。` : '');
+  if (reset) $('playlist-entry').replaceChildren();
+  if (playlist) {
+    setText('playlist-title', `${playlist.title} · ${playlist.entries.length} 个视频${state.playlistLoading ? '（读取中）' : playlist.complete === false ? '（未完整）' : ''}`);
+    const fragment = document.createDocumentFragment();
+    for (let index = $('playlist-entry').options.length; index < playlist.entries.length; index++) {
+      const entry = playlist.entries[index];
+      fragment.append(new Option(`${entry.index}. ${entry.title}`, String(index)));
+    }
+    $('playlist-entry').append(fragment);
+  } else {
+    setText('playlist-title', '视频合集');
   }
   playlistKey = key;
-  if (playlist && (next.playlist !== undefined || next.playlistIndex !== undefined && $('playlist-entry').dataset.playing !== String(state.playlistIndex))) {
+  if (playlist && (reset || $('playlist-entry').dataset.playing !== String(state.playlistIndex))) {
     $('playlist-entry').value = String(state.playlistIndex);
     $('playlist-entry').dataset.playing = String(state.playlistIndex);
   }
@@ -53,13 +132,14 @@ window.muralop.onState(next => {
 });
 function updatePlaylistControls() {
   const index = Number($('playlist-entry').value);
-  $('play-entry').disabled = !state.backendOnline || !state.playlist;
-  $('previous-entry').disabled = !state.backendOnline || !state.playlist || index <= 0;
-  $('next-entry').disabled = !state.backendOnline || !state.playlist || index >= state.playlist.entries.length - 1;
+  const selected = state.playerReady && state.playlist && $('playlist-entry').selectedIndex >= 0;
+  $('play-entry').disabled = !selected;
+  $('previous-entry').disabled = !selected || index <= 0;
+  $('next-entry').disabled = !selected || index >= state.playlist.entries.length - 1;
 }
 setInterval(() => {
-  $('elapsed').textContent = state.canCancel && state.startedAt ? `${Math.floor((Date.now() - state.startedAt) / 1000)} 秒` : '';
-}, 250);
+  setText('elapsed', state.canCancel && state.startedAt ? `${Math.floor((Date.now() - state.startedAt) / 1000)} 秒` : '');
+}, 1000);
 $('playlist-entry').addEventListener('change', updatePlaylistControls);
 $('play-entry').addEventListener('click', () => invoke('play-entry', Number($('playlist-entry').value)));
 for (const [id, offset] of [['previous-entry', -1], ['next-entry', 1]]) $(id).addEventListener('click', () => {
@@ -67,10 +147,22 @@ for (const [id, offset] of [['previous-entry', -1], ['next-entry', 1]]) $(id).ad
   updatePlaylistControls();
   invoke('play-entry', Number($('playlist-entry').value));
 });
-$('play-form').addEventListener('submit', event => { event.preventDefault(); invoke('play', $('source').value); });
-for (const action of ['cancel','pause','mute','file','clear','connect','quit-ui','retry-browser','import-browser','import-file','clear-session']) $(action).addEventListener('click', () => invoke(action));
-$('monitor').addEventListener('change', () => invoke('monitor', $('monitor').value));
-$('site').addEventListener('change', () => invoke('site', $('site').value));
+$('play-form').addEventListener('submit', event => {
+  event.preventDefault();
+  if (!$('source').value.trim()) {
+    $('source').setCustomValidity('请先粘贴视频网址，也可以直接点击右侧网页中的视频。');
+    $('source').reportValidity();
+    return;
+  }
+  invoke('play', $('source').value);
+});
+$('source').addEventListener('input', () => $('source').setCustomValidity(''));
+for (const action of ['cancel','pause','mute','file','clear','connect','retry-browser','import-browser','import-file','clear-session','window-minimize','window-maximize','window-hide']) $(action).addEventListener('click', () => invoke(action));
+$('monitor').addEventListener('change', () => { $('clear').disabled = !state.playerReady || !$('monitor').value; invoke('monitor', $('monitor').value); });
+$('site-switch').addEventListener('click', () => {
+  const bounds = $('site-switch').getBoundingClientRect();
+  invoke('site-menu', { x: bounds.x, y: bounds.bottom + 4 });
+});
 $('volume').addEventListener('input', () => { $('volume-value').textContent = $('volume').value; });
 $('volume').addEventListener('change', () => invoke('volume', Number($('volume').value)));
 for (const id of ['quality','extractor','browser','profile']) $(id).addEventListener('change', () => invoke('settings', {
@@ -81,10 +173,14 @@ const resize = () => {
   cancelAnimationFrame(layoutFrame);
   layoutFrame = requestAnimationFrame(() => {
     const bounds = $('browser-slot').getBoundingClientRect();
-    window.muralop.layout({ x: bounds.x + 1, y: bounds.y + 1, width: bounds.width - 2, height: bounds.height - 2 });
+    window.muralop.layout({ x: bounds.x, y: bounds.y + 3, width: bounds.width, height: bounds.height - 3 });
   });
 };
 new ResizeObserver(resize).observe($('browser-slot'));
 window.addEventListener('resize', resize);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) resize(); });
 invoke('state');
+for (const action of ['copy-diagnostics', 'clear-errors']) $(action).addEventListener('click', async () => {
+  const result = await invoke(action);
+  if (result) setText('diagnostics-message', result);
+});

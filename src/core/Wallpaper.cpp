@@ -183,14 +183,24 @@ void Wallpaper::setUserPaused(bool paused)
 
 void Wallpaper::setLocked(bool locked)
 {
+    if (locked_ == locked)
+        return;
     locked_ = locked;
     applyPlayback();
+    if (!locked_)
+        for (auto& slot : slots_)
+            slot->surface->requestRedraw();
 }
 
 void Wallpaper::setSuspended(bool suspended)
 {
+    if (suspended_ == suspended)
+        return;
     suspended_ = suspended;
     applyPlayback();
+    if (!suspended_)
+        for (auto& slot : slots_)
+            slot->surface->requestRedraw();
 }
 
 void Wallpaper::applyPlayback()

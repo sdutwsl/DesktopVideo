@@ -21,6 +21,7 @@
           ninja
           _7zz # 7zz unpacks the libmpv SDK (p7zip cannot read the ARM64 archive's filter)
           nsis # makensis, for `ninja installer`
+          nodejs # Stable Node-API headers for the playback plugin
         ];
     in
     {

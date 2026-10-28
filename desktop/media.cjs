@@ -121,22 +121,40 @@ async function resolveMedia(processes, extractor, source, { cookies, quality = '
   return { source, video: video.url, audio: audio?.url || '', userAgent, referrer, title: data.title || '在线视频' };
 }
 
-async function resolvePlaylist(processes, extractor, source, { cookies, signal } = {}) {
-  const args = ['--ignore-config', '--yes-playlist', '--flat-playlist', '--ignore-errors', '--no-warnings', '--skip-download', '--dump-single-json'];
+async function resolvePlaylist(processes, extractor, source, { cookies, signal, onUpdate } = {}) {
+  // Flat, lazy extraction produces usable entries before later pages arrive.
+  // Print only list metadata, omitting thumbnails and other large per-video data.
+  const args = ['--ignore-config', '--yes-playlist', '--flat-playlist', '--lazy-playlist', '--ignore-errors', '--no-warnings', '--skip-download',
+    '--print', '%(.{id,title,url,webpage_url,playlist_index,playlist_title,availability})j'];
   if (cookies) args.push('--cookies', cookies);
   args.push('--', source);
-  let output;
-  try { output = await processes.run(extractor, args, { signal, timeout: 60000 }); }
-  catch (error) { throw extractorError(error); }
-  const data = JSON.parse(output);
-  const entries = (data.entries || []).flatMap((entry, index) => {
-    if (!entry || ['private', 'unavailable'].includes(entry.availability)) return [];
+  const entries = [];
+  let title = '视频合集', timer, received = false;
+  const snapshot = complete => ({ source, title, entries: entries.slice(), complete });
+  const publish = () => { timer = null; onUpdate?.(snapshot(false)); };
+  const append = entry => {
+    if (!entry || ['private', 'unavailable'].includes(entry.availability)) return;
     const url = youtubeVideo(entry.webpage_url) || youtubeVideo(entry.url)
       || (/^[\w-]{11}$/.test(entry.id || '') ? `https://www.youtube.com/watch?v=${entry.id}` : null);
-    return url ? [{ source: url, title: entry.title || `视频 ${index + 1}`, index: entry.playlist_index || index + 1 }] : [];
-  });
+    if (!url) return;
+    if (entry.playlist_title) title = entry.playlist_title;
+    entries.push({ source: url, title: entry.title || `视频 ${entries.length + 1}`, index: entry.playlist_index || entries.length + 1 });
+    if (entries.length === 1) publish();
+    else if (!timer) timer = setTimeout(publish, 250);
+  };
+  const consume = line => {
+    received = true;
+    const data = JSON.parse(line);
+    if (Array.isArray(data.entries)) { title = data.title || title; data.entries.forEach(append); }
+    else append(data);
+  };
+  try {
+    const output = await processes.run(extractor, args, { signal, onLine: consume, idleTimeout: true, timeout: 60000 });
+    if (!received && output.trim()) output.trim().split('\n').forEach(consume);
+  } catch (error) { throw extractorError(error); }
+  finally { clearTimeout(timer); }
   if (!entries.length) throw new Error('合集中没有可播放的视频，请检查合集是否公开或已登录。');
-  return { source, title: data.title || '视频合集', entries };
+  return snapshot(true);
 }
 
 module.exports = { youtubeVideo, youtubeSource, youtubePlaylist, httpUrl, sessionDomain, electronCookie, exportCookies, resolveMedia, resolvePlaylist };

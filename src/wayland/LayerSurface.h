@@ -26,6 +26,7 @@ public:
     const MonitorInfo& monitor() const override { return monitor_; }
     void attach(MpvPlayer& player) override;
     void detach() override;
+    void requestRedraw() override;
 
     // EventLoop::Source, woken by mpv (new frame or pending events)
     int fd() override { return wakeFd_; }
@@ -36,6 +37,7 @@ private:
     void setPreferredScale(uint32_t scale120);
     void resizeBuffer();
     void render();
+    void restoreFrame();
     void frameDone();
     void wake();
     bool makeCurrent();
@@ -58,6 +60,7 @@ private:
     bool configured_ = false;
     bool closed_ = false;
     bool dirty_ = false;   // a frame arrived while a frame callback was pending
+    bool redrawRequested_ = false;
     unsigned framesDrawn_ = 0;   // MURALOP_DEBUG statistics
 
     MpvPlayer* player_ = nullptr;

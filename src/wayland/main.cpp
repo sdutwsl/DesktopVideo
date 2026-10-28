@@ -52,23 +52,33 @@ std::string uiCommand()
     return {};
 }
 
-bool showMainWindow(bool foreground = false)
+bool showMainWindow(bool foreground = false, bool background = false, const std::string& configPath = {},
+                    const std::vector<std::string>& options = {})
 {
     std::string command = uiCommand();
     if (command.empty()) {
         fputs("[ui] muralop-ui is not installed; see README for GUI setup\n", stderr);
         return false;
     }
-    char* argv[] = {command.data(), nullptr};
+    char backgroundArg[] = "--background";
+    char configArg[] = "--config";
+    std::vector<char*> argv{command.data()};
+    if (background) argv.push_back(backgroundArg);
+    if (!configPath.empty()) {
+        argv.push_back(configArg);
+        argv.push_back(const_cast<char*>(configPath.c_str()));
+    }
+    for (const auto& option : options) argv.push_back(const_cast<char*>(option.c_str()));
+    argv.push_back(nullptr);
     if (foreground) {
         // Keep `muralop ui` in the terminal's foreground process group. A detached
         // child would survive Ctrl+C and keep writing to the terminal after exit.
-        execvp(command.c_str(), argv);
+        execvp(command.c_str(), argv.data());
         fprintf(stderr, "[ui] cannot start muralop-ui: %s\n", strerror(errno));
         return false;
     }
     pid_t pid = 0;
-    if (posix_spawnp(&pid, command.c_str(), nullptr, nullptr, argv, environ) != 0) {
+    if (posix_spawnp(&pid, command.c_str(), nullptr, nullptr, argv.data(), environ) != 0) {
         fputs("[ui] muralop-ui is not installed; see README for GUI setup\n", stderr);
         return false;
     }
@@ -86,11 +96,11 @@ void usage()
 {
     fputs("usage: muralop [--config FILE] [COMMAND]\n"
           "\n"
-          "  (no command)          start the wallpaper daemon\n"
+          "  (no command)          open the app (standalone player if no UI is installed)\n"
           "  FILE                  use FILE as the wallpaper video (starts the daemon if needed)\n"
           "  set FILE [MONITOR]    set the video, optionally for one monitor only\n"
           "  choose [MONITOR]      open a file dialog\n"
-          "  ui                    open the YouTube control window\n"
+          "  ui                    open the application window\n"
           "  rpc                   read one control request from stdin, reply as JSON\n"
           "  pause | resume        pause / resume playback\n"
           "  mute | unmute\n"
@@ -198,6 +208,7 @@ int main(int argc, char** argv)
     std::string configPath = (configBase() / "muralop" / "config.ini").string();
     std::string legacyConfigPath = (configBase() / "videowallpaper" / "config.ini").string();
     std::vector<std::string> args;
+    bool background = false;
     for (int i = 1; i < argc; ++i) {
         if (!strcmp(argv[i], "--config") && i + 1 < argc) {
             configPath = argv[++i];
@@ -207,9 +218,9 @@ int main(int argc, char** argv)
             usage();
             return 0;
         } else if (!strcmp(argv[i], "--background")) {
-            // The GUI starts the backend as a separate process.
+            background = true;
         } else if (!strcmp(argv[i], "ui")) {
-            return showMainWindow(true) ? 0 : 1;
+            return showMainWindow(true, background, legacyConfigPath.empty() ? configPath : "") ? 0 : 1;
         } else
             args.push_back(argv[i]);
     }
@@ -226,6 +237,19 @@ int main(int argc, char** argv)
             fprintf(stderr, "muralop: %s\n", error.what());
             return 1;
         }
+    }
+
+    // The complete package starts one Electron application. The executable
+    // remains a standalone player only when the UI is not installed.
+    if (!uiCommand().empty()) {
+        std::vector<std::string> options;
+        if (args.size() >= 2 && args.size() <= 3 && args[0] == "set")
+            options = {"--play", videoSource(args[1]), "--monitor", args.size() == 3 ? args[2] : ""};
+        else if (args.size() == 1 && (args[0].starts_with("https://") || args[0].starts_with("http://")
+                                     || std::filesystem::is_regular_file(args[0])))
+            options = {"--play", videoSource(args[0])};
+        if (args.empty() || !options.empty())
+            return showMainWindow(true, background, legacyConfigPath.empty() ? configPath : "", options) ? 0 : 1;
     }
 
     std::unique_ptr<sdbus::IConnection> session;

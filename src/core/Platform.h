@@ -25,6 +25,9 @@ public:
     virtual void attach(MpvPlayer& player) = 0;
     // Undo attach(); called before the player is destroyed (the surface still exists).
     virtual void detach() = 0;
+    // Restore a visible frame after the desktop/session becomes available again.
+    // Native window surfaces are repainted by their platform unless overridden.
+    virtual void requestRedraw() {}
 };
 
 // Everything the core needs from the OS.

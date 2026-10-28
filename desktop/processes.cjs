@@ -1,5 +1,6 @@
 const { spawn } = require('node:child_process');
 const path = require('node:path');
+const { createInterface } = require('node:readline');
 
 function abortError(message = '操作已取消') {
   return Object.assign(new Error(message), { name: 'AbortError' });
@@ -12,14 +13,14 @@ function safeError(text) {
 class Processes {
   constructor() { this.active = new Set(); }
 
-  run(executable, args, { input, signal, timeout = 45000, maxBytes = 32 * 1024 * 1024 } = {}) {
+  run(executable, args, { input, signal, onLine, idleTimeout = false, timeout = 45000, maxBytes = 32 * 1024 * 1024 } = {}) {
     if (signal?.aborted) return Promise.reject(abortError());
     return new Promise((resolve, reject) => {
       const child = spawn(executable, args, {
         windowsHide: true, detached: process.platform !== 'win32',
         stdio: ['pipe', 'pipe', 'pipe'], shell: false,
       });
-      let done = false, bytes = 0, output = [], errors = '';
+      let done = false, bytes = 0, output = [], errors = '', lines;
       const kill = () => {
         if (!child.pid || child.exitCode !== null) return;
         if (process.platform === 'win32') {
@@ -35,6 +36,7 @@ class Processes {
         if (done) return;
         done = true;
         clearTimeout(timer);
+        lines?.close();
         signal?.removeEventListener('abort', cancel);
         this.active.delete(cancel);
         error ? reject(error) : resolve(value);
@@ -47,10 +49,18 @@ class Processes {
       this.active.add(cancel);
       signal?.addEventListener('abort', cancel, { once: true });
       if (signal?.aborted) cancel();
+      if (onLine) {
+        lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
+        lines.on('line', line => {
+          if (done || !line.trim()) return;
+          if (idleTimeout) timer.refresh();
+          try { onLine(line); } catch (error) { kill(); finish(error); }
+        });
+      }
       child.stdout.on('data', chunk => {
         bytes += chunk.length;
         if (bytes > maxBytes) { kill(); finish(new Error('进程返回的数据过大')); }
-        else output.push(chunk);
+        else if (!onLine) output.push(chunk);
       });
       child.stderr.on('data', chunk => { errors = (errors + chunk.toString('utf8')).slice(-4096); });
       child.on('error', error => finish(new Error(`无法启动 ${path.basename(executable)}：${error.code || error.message}`)));

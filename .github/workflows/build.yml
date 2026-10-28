@@ -55,11 +55,11 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             ca-certificates git cmake ninja-build pkg-config g++ libmpv-dev libwayland-dev libwayland-bin \
-            libegl-dev libgles-dev libsdbus-c++-dev dpkg-dev file
+            libegl-dev libgles-dev libsdbus-c++-dev libnode-dev dpkg-dev file
       - uses: actions/checkout@v4
       - name: Build
         run: |
-          cmake -S . -B build -G Ninja
+          cmake -S . -B build -G Ninja -DMURALOP_BUILD_NODE_PLUGIN=ON
           ninja -C build
           ctest --test-dir build --output-on-failure
       - name: Package .deb
@@ -142,18 +142,24 @@ jobs:
           nix develop ".#$SHELL_NAME" -c 7zz x -y -o"$RUNNER_TEMP/mpv-sdk" "$SDK" > /dev/null
       - name: Build
         run: |
+          node_headers=$(nix develop ".#$SHELL_NAME" -c node -p "require('path').resolve(process.execPath, '../../include/node')")
+          plugin=OFF
+          if [ "$SHELL_NAME" = mingw ]; then plugin=ON; fi
           nix develop ".#$SHELL_NAME" -c cmake -S . -B build-win -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" -DMPV_SDK_DIR="$RUNNER_TEMP/mpv-sdk"
+            -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" -DMPV_SDK_DIR="$RUNNER_TEMP/mpv-sdk" \
+            -DMURALOP_BUILD_NODE_PLUGIN="$plugin" -DNODE_INCLUDE_DIR="$node_headers"
           nix develop ".#$SHELL_NAME" -c ninja -C build-win
-      - name: Export GUI backend and control host
+      - name: Export GUI playback plugin and control host
         if: matrix.arch == 'x64'
         uses: actions/upload-artifact@v4
         with:
-          name: windows-backend-x64
+          name: windows-player-x64
           path: |
             build-win/muralop.exe
             build-win/libmpv-2.dll
             build-win/muralop_control_test.exe
+            build-win/desktop/muralop.node
+            build-win/desktop/package.json
       - name: Package installer and portable zip
         run: |
           nix develop ".#$SHELL_NAME" -c ninja -C build-win installer portable
@@ -200,38 +206,44 @@ jobs:
             libegl1 libgl1 libglvnd0 libglx0 libnss3 libasound2t64
           for deb in ./*.deb; do dpkg-deb -x "$deb" .; done
           echo "LD_LIBRARY_PATH=$PWD/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
-      - name: Download Windows backend
+      - name: Download Windows playback plugin
         if: runner.os == 'Windows'
         uses: actions/download-artifact@v4
         with:
-          name: windows-backend-x64
-          path: backend
+          name: windows-player-x64
+          path: player
+      - name: Prepare Windows playback plugin
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Move-Item player/desktop/muralop.node player/muralop.node
+          Move-Item player/desktop/package.json player/package.json
       - name: Test Windows IPC and GUI
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $env:MURALOP_CONTROL_TEST = "$pwd/backend/muralop_control_test.exe"
+          $env:MURALOP_CONTROL_TEST = "$pwd/player/muralop_control_test.exe"
           python -m pytest tests/test_session.py tests/test_windows_pipe.py -q
           npm start --prefix desktop -- --smoke-test ../gui-preview.png
-      - name: Download Ubuntu backend
+      - name: Download Ubuntu playback plugin
         if: runner.os == 'Linux'
         uses: actions/download-artifact@v4
         with:
           name: ubuntu-26.04-amd64
-          path: backend-deb
-      - name: Extract Ubuntu backend
+          path: player-deb
+      - name: Extract Ubuntu playback plugin
         if: runner.os == 'Linux'
         run: |
-          mkdir -p backend-extract backend
-          dpkg-deb -x backend-deb/*.deb backend-extract
-          cp backend-extract/usr/bin/muralop backend/
+          mkdir -p player-extract player
+          dpkg-deb -x player-deb/*.deb player-extract
+          cp player-extract/usr/share/muralop/desktop/{muralop.node,package.json} player/
       - name: Test Linux GUI
         if: runner.os == 'Linux'
         run: |
           python -m pytest tests/test_session.py tests/test_windows_pipe.py -q
           xvfb-run -a npm start --prefix desktop -- --no-sandbox --disable-gpu --smoke-test ../gui-preview.png
       - name: Package GUI, yt-dlp and Deno
-        run: python desktop/package.py --backend-dir backend
+        run: python desktop/package.py --player-dir player
       - name: Smoke-test packaged Electron on Windows
         if: runner.os == 'Windows'
         shell: pwsh
@@ -327,6 +339,7 @@ jobs:
         run: |
           cd assets
           rm -f muralop.exe libmpv-2.dll muralop_control_test.exe
+          rm -rf desktop
           sha256sum -- * > SHA256SUMS
           ls -l
       - name: Create release

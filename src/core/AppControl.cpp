@@ -27,6 +27,7 @@ std::string AppControl::state() const
 {
     std::ostringstream out;
     out << "{\"ok\":true,\"paused\":" << (wallpaper_.userPaused() ? "true" : "false")
+        << ",\"version\":" << quote(MURALOP_VERSION)
         << ",\"mute\":" << (wallpaper_.mute() ? "true" : "false")
         << ",\"volume\":" << wallpaper_.volume()
         << ",\"video\":" << quote(wallpaper_.videoFor(""))

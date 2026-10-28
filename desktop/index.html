@@ -11,40 +11,62 @@
   <aside>
     <header><span class="brand-mark">M</span><div><h1>Muralop</h1><p>让视频成为桌面风景</p></div></header>
     <section id="feedback" data-phase="connecting" aria-live="polite">
-      <div class="phase-row"><span id="indicator"></span><strong id="phase">连接中</strong><span id="elapsed"></span></div>
-      <p id="message">正在连接播放后端…</p>
-      <div id="progress"><span></span></div>
-      <button id="cancel" hidden>取消当前任务</button>
+      <div class="phase-row"><span id="indicator" aria-hidden="true"></span><strong id="phase">连接中</strong><span id="elapsed"></span><button id="cancel" hidden>取消当前任务</button></div>
+      <p id="message">正在启动播放…</p>
+      <ol id="load-steps" aria-label="播放步骤"><li data-step="resolving"><span>1</span>解析视频</li><li data-step="loading"><span>2</span>加载画面</li><li data-step="playing"><span>3</span>桌面播放</li></ol>
+      <div id="progress" role="progressbar" aria-label="正在处理"><span></span></div>
     </section>
-    <form id="play-form">
+    <form id="play-form" class="control-card">
+      <h2 class="section-title">播放来源</h2>
       <label for="monitor">播放到</label><select id="monitor"><option value="">所有显示器（默认视频）</option></select>
       <label for="source">视频来源</label><input id="source" placeholder="粘贴 B站、YouTube 等视频网址" autocomplete="off">
       <button id="play" class="primary" type="submit">播放到桌面</button>
     </form>
-    <section id="playlist-panel" hidden>
+    <section id="playlist-panel" class="control-card" hidden>
       <label id="playlist-title" for="playlist-entry">视频合集</label>
+      <p id="playlist-status" class="hint" role="status"></p>
       <select id="playlist-entry" aria-label="选择合集视频"></select>
       <div class="row playlist-controls"><button id="previous-entry">上一个</button><button id="play-entry">播放所选</button><button id="next-entry">下一个</button></div>
     </section>
     <div class="row"><button id="file">选择本地视频</button><button id="clear" title="恢复此显示器的默认视频">恢复默认</button></div>
-    <div class="playback-controls"><button id="pause">暂停</button><button id="mute">静音</button></div>
+    <section class="control-card player-card" aria-label="播放设置">
+    <h2 class="section-title">播放控制</h2>
+    <div class="playback-controls"><button id="pause" aria-pressed="false">暂停</button><button id="mute" aria-pressed="false">静音</button></div>
     <label for="volume">音量 <output id="volume-value">50</output></label><input id="volume" type="range" min="0" max="100" value="50">
     <label for="quality">画质</label><select id="quality"><option value="">自动画质</option><option value="bestvideo[height&lt;=1080]+bestaudio/best[height&lt;=1080]">最高 1080p</option><option value="bestvideo[height&lt;=2160]+bestaudio/best[height&lt;=2160]">最高 2160p</option></select>
+    </section>
     <details><summary>登录会话与播放设置</summary>
-      <p class="hint">网页会记住登录。也可以导入浏览器会话或 cookies.txt，导入会替换现有登录。Google 提示 Cookie 有问题时，先清除登录会话再登录。</p>
+      <p class="hint">一次导入浏览器或 cookies.txt 中所有已接入平台的登录会话，切换平台后直接使用。导入会替换对应平台已有的会话。</p>
       <label for="browser">导入来源</label><select id="browser"><option value="chrome">Chrome</option><option value="edge">Edge</option><option value="firefox">Firefox</option><option value="chromium">Chromium</option><option value="brave">Brave</option></select>
       <input id="profile" placeholder="浏览器配置名称或路径，可留空">
-      <button id="import-browser">导入浏览器登录会话</button><button id="import-file">从 cookies.txt 导入</button><button id="clear-session">清除登录会话</button>
+      <button id="import-browser">一键导入全部平台会话</button><button id="import-file">从 cookies.txt 导入全部平台</button><button id="clear-session">清除登录会话</button>
       <label for="extractor">yt-dlp 路径</label><input id="extractor" placeholder="使用内置解析器">
       <p class="hint">留空使用随应用提供的版本。</p>
     </details>
-    <footer><span>独立视频播放核心</span><button id="connect">重连</button><button id="quit-ui" title="退出界面，壁纸继续播放">退出界面</button></footer>
+    <details id="diagnostics-panel"><summary>关于与诊断</summary>
+      <dl class="diagnostics-info"><dt>应用版本</dt><dd id="app-version">—</dd><dt>文件标识</dt><dd id="app-fingerprint">—</dd><dt>运行位置</dt><dd id="app-location">—</dd><dt>播放插件</dt><dd id="app-plugin">—</dd></dl>
+      <p class="hint">保留最近 20 条错误；复制内容会隐藏网址和会话请求头。</p>
+      <ol id="recent-errors" class="recent-errors"></ol>
+      <button id="copy-diagnostics">复制诊断信息</button><button id="clear-errors">清空错误记录</button>
+      <p id="diagnostics-message" class="hint" role="status"></p>
+    </details>
+    <footer><span id="player-status" data-online="false">正在启动播放…</span><button id="connect">重启播放</button></footer>
   </aside>
   <main>
-    <div class="browser-header"><select id="site" aria-label="视频站点"></select><p id="playback-summary" aria-live="polite">点击视频，播放到桌面</p></div>
-    <p id="browser-status" role="status">正在加载网页…</p>
-    <button id="retry-browser" hidden>重新加载网页</button>
-    <div id="browser-slot"><span>正在加载网页…</span></div>
+    <div class="browser-header">
+      <button id="site-switch" title="切换视频平台" aria-label="切换视频平台" aria-haspopup="menu"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="2" width="6" height="6" rx="1.5"/><rect x="12" y="2" width="6" height="6" rx="1.5"/><rect x="2" y="12" width="6" height="6" rx="1.5"/><rect x="12" y="12" width="6" height="6" rx="1.5"/></svg></button>
+      <span id="site-name">YouTube</span>
+      <div class="now-playing"><span class="equalizer" aria-hidden="true"><i></i><i></i><i></i><i></i></span><p id="playback-summary" aria-live="polite">点击视频，播放到桌面</p></div>
+      <div class="browser-meta"><span class="status-dot" aria-hidden="true"></span><p id="browser-status" role="status">正在加载网页…</p><button id="retry-browser" hidden>重新加载</button></div>
+      <div class="window-controls"><button id="window-minimize" title="最小化" aria-label="最小化">−</button><button id="window-maximize" title="最大化" aria-label="最大化">□</button><button id="window-hide" title="隐藏到托盘" aria-label="隐藏到托盘">×</button></div>
+    </div>
+    <div id="browser-slot" data-state="loading" aria-busy="true">
+      <div class="browser-placeholder">
+        <div class="placeholder-heading"><span id="browser-loader" class="spinner" aria-hidden="true"></span><div><strong id="placeholder-title">正在打开视频站点</strong><p id="placeholder-message">网页就绪后会自动显示，左侧控制可继续使用。</p></div></div>
+        <div class="skeleton-grid" aria-hidden="true"><div class="skeleton-card"><div></div><span></span><span></span></div><div class="skeleton-card"><div></div><span></span><span></span></div><div class="skeleton-card"><div></div><span></span><span></span></div><div class="skeleton-card"><div></div><span></span><span></span></div><div class="skeleton-card"><div></div><span></span><span></span></div><div class="skeleton-card"><div></div><span></span><span></span></div></div>
+      </div>
+      <div id="browser-progress" aria-hidden="true"><span></span></div>
+    </div>
   </main>
   <script src="renderer.cjs"></script>
 </body>

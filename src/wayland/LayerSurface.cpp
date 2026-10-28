@@ -146,6 +146,35 @@ void LayerSurface::wake()
     [[maybe_unused]] ssize_t n = write(wakeFd_, &one, sizeof one);
 }
 
+void LayerSurface::requestRedraw()
+{
+    // Session callbacks can run before WaylandDisplay has completed/cancelled
+    // its pending display read. Defer EGL rendering to our own dispatch source.
+    redrawRequested_ = true;
+    wake();
+}
+
+void LayerSurface::restoreFrame()
+{
+    if (!configured_ || closed_ || eglSurface_ == EGL_NO_SURFACE)
+        return;
+    // A frame callback is only a pacing hint. It may remain pending while the
+    // lock screen obscures us; do not let it gate the first frame after unlock.
+    if (frameCallback_) {
+        wl_callback_destroy(frameCallback_);
+        frameCallback_ = nullptr;
+    }
+    dirty_ = false;
+    if (!makeCurrent()) {
+        fprintf(stderr, "[%s] cannot restore EGL drawing after session resume (0x%x)\n",
+                monitor_.id.c_str(), eglGetError());
+        return;
+    }
+    if (render_)
+        mpv_render_context_update(render_);
+    render();
+}
+
 // ---- layer surface / scale events (loop thread) -------------------------------
 
 void LayerSurface::configure(uint32_t serial, uint32_t width, uint32_t height)
@@ -269,7 +298,10 @@ void LayerSurface::dispatch(short revents)
     [[maybe_unused]] ssize_t n = read(wakeFd_, &v, sizeof v);
     if (player_)
         player_->processEvents();
-    if (render_ && (mpv_render_context_update(render_) & MPV_RENDER_UPDATE_FRAME))
+    if (redrawRequested_) {
+        redrawRequested_ = false;
+        restoreFrame();
+    } else if (render_ && (mpv_render_context_update(render_) & MPV_RENDER_UPDATE_FRAME))
         render();
 }
 

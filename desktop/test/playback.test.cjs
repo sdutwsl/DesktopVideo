@@ -14,7 +14,7 @@ test('resolving remains responsive, is cancellable and ignores late results', as
   const player = plugin();
   let complete;
   const playback = new Playback(player, () => new Promise(resolve => { complete = resolve; }));
-  playback.state.backendOnline = true;
+  playback.state.playerReady = true;
   const phases = [];
   playback.on('state', state => phases.push(state.phase));
   const operation = playback.play('https://www.youtube.com/watch?v=abcdefghijk');
@@ -33,7 +33,7 @@ test('resolving remains responsive, is cancellable and ignores late results', as
 test('loading becomes playing only when the core confirms playback', async () => {
   const player = plugin();
   const playback = new Playback(player, async source => ({ source, title: 'Demo' }));
-  playback.state.backendOnline = true;
+  playback.state.playerReady = true;
   await playback.play('https://www.youtube.com/watch?v=abcdefghijk');
   assert.equal(playback.state.phase, 'loading');
   await playback.poll();
@@ -47,7 +47,7 @@ test('loading becomes playing only when the core confirms playback', async () =>
 test('cancelling loading stops the core and a failed resolver reports an error', async () => {
   const player = plugin();
   const playback = new Playback(player, async source => ({ source }));
-  playback.state.backendOnline = true;
+  playback.state.playerReady = true;
   await playback.play('https://example.com/video');
   await playback.cancel();
   assert.ok(player.calls.includes('stop'));
@@ -57,24 +57,24 @@ test('cancelling loading stops the core and a failed resolver reports an error',
   assert.equal(playback.state.message, '解析失败');
 });
 
-test('an unresponsive backend reports failure without blocking controls', async () => {
+test('an unresponsive player reports failure without blocking controls', async () => {
   const player = plugin();
   const playback = new Playback(player, async () => ({}));
-  playback.state.backendOnline = true;
+  playback.state.playerReady = true;
   player.request = async () => { await wait(20); throw new Error('超时'); };
   const polling = playback.poll();
   await playback.cancel();
   assert.equal(playback.state.phase, 'cancelled');
   await polling;
   assert.equal(playback.state.phase, 'error');
-  assert.equal(playback.state.backendOnline, false);
+  assert.equal(playback.state.playerReady, false);
 });
 
-test('an old backend without playback reporting is refused with a hint', async () => {
-  const playback = new Playback({ connect: async () => ({ ok: true, monitors: [], volume: 50 }) }, async () => ({}));
+test('a plugin startup failure leaves playback unavailable and reports the cause', async () => {
+  const playback = new Playback({ connect: async () => { throw new Error('播放插件加载失败'); } }, async () => ({}));
   assert.equal(await playback.connect(), null);
-  assert.equal(playback.state.backendOnline, false);
-  assert.match(playback.state.message, /旧版播放后端/);
+  assert.equal(playback.state.playerReady, false);
+  assert.equal(playback.state.message, '播放插件加载失败');
 });
 
 test('a status response from the preceding video cannot clear the new loading indicator', async () => {
@@ -82,7 +82,7 @@ test('a status response from the preceding video cannot clear the new loading in
   player.status.playback = 'playing';
   player.request = async () => pending.promise;
   const playback = new Playback(player, async source => ({ source }));
-  playback.state.backendOnline = true;
+  playback.state.playerReady = true;
   const poll = playback.poll();
   await playback.play('https://example.com/new');
   pending.resolve(player.status);
@@ -96,7 +96,7 @@ test('loading stays visible until the new play request is acknowledged', async (
   player.status.playback = 'playing';
   player.playResolved = () => accepted.promise;
   const playback = new Playback(player, async source => ({ source }));
-  playback.state.backendOnline = true;
+  playback.state.playerReady = true;
   const play = playback.play('https://example.com/new');
   await wait(0);
   await playback.poll();
@@ -110,7 +110,7 @@ test('loading stays visible until the new play request is acknowledged', async (
 test('rapid selections resolve only the last video and report progress immediately', async () => {
   const player = plugin(), first = deferred();
   const playback = new Playback(player, source => source.endsWith('/old') ? first.promise : Promise.resolve({ source }));
-  playback.state.backendOnline = true;
+  playback.state.playerReady = true;
   const old = playback.play('https://example.com/old');
   assert.equal(playback.state.phase, 'resolving');
   const next = playback.play('https://example.com/new');
@@ -124,7 +124,7 @@ test('a delayed cancellation cannot stop the video selected after it', async () 
   const player = plugin(), stop = deferred();
   player.request = async command => { player.calls.push(command); if (command === 'stop') await stop.promise; return player.status; };
   const playback = new Playback(player, async source => ({ source }));
-  playback.state.backendOnline = true;
+  playback.state.playerReady = true;
   await playback.play('https://example.com/old');
   const cancel = playback.cancel();
   const next = playback.play('https://example.com/new');
@@ -139,7 +139,7 @@ test('a delayed cancellation cannot stop the video selected after it', async () 
 test('a selected monitor is not affected by errors or playing state on other monitors', async () => {
   const player = plugin();
   const playback = new Playback(player, async source => ({ source }));
-  playback.state.backendOnline = true;
+  playback.state.playerReady = true;
   await playback.play('https://example.com/new', 'A');
   player.status = { ...player.status, playback: 'error', error: 'other monitor failed', monitors: [
     { id: 'A', video: 'https://example.com/new', playback: 'loading' }, { id: 'B', playback: 'error' },
@@ -151,7 +151,7 @@ test('a selected monitor is not affected by errors or playing state on other mon
   assert.equal(playback.state.phase, 'playing');
 });
 
-test('reconnecting to a loading backend retains loading progress until playback begins', async () => {
+test('connecting to a loading player retains loading progress until playback begins', async () => {
   const player = plugin();
   player.status.playback = 'loading';
   player.connect = async () => player.status;
@@ -168,7 +168,7 @@ test('collections expose every video and switching entries resolves only the sel
   const entries = ['abcdefghijk', 'lmnopqrstuv', '12345678901'].map((id, i) => ({ source: `https://www.youtube.com/watch?v=${id}`, index: i + 1, title: `Video ${i + 1}` }));
   const playback = new Playback(player, async source => { resolved.push(source); return { source }; },
     async source => ({ source, title: 'Collection', entries }));
-  playback.state.backendOnline = true;
+  playback.state.playerReady = true;
   await playback.play('https://www.youtube.com/watch?v=lmnopqrstuv&list=PLdemo&index=2');
   assert.equal(playback.state.playlist.entries.length, 3);
   assert.equal(playback.state.playlistIndex, 1);
@@ -182,7 +182,7 @@ test('collections expose every video and switching entries resolves only the sel
 test('collection discovery is cancellable and ignores late list results', async () => {
   const player = plugin(), list = deferred();
   const playback = new Playback(player, async source => ({ source }), () => list.promise);
-  playback.state.backendOnline = true;
+  playback.state.playerReady = true;
   const play = playback.play('https://www.youtube.com/playlist?list=PLdemo');
   assert.match(playback.state.message, /读取合集/);
   await playback.cancel();

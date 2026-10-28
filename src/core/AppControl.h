@@ -7,8 +7,9 @@
 
 namespace muralop {
 
-// Local GUI protocol: command and arguments separated by newlines; JSON replies.
-// It is carried over the session bus or a per-user Windows named pipe, never TCP.
+// Shared command interface: newline-separated arguments and JSON replies.
+// The Node plugin calls this on its render thread; standalone shells also
+// expose it over a session bus or a per-user Windows named pipe.
 class AppControl {
 public:
     AppControl(Wallpaper& wallpaper, Config& config, std::function<void()> quit);
