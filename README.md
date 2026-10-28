@@ -12,7 +12,7 @@
 
 A video wallpaper player: shared libmpv core, native shells for Wayland (layer-shell), Windows (WorkerW) and macOS (desktop-level windows).
 
-v2.2.0 及更早版本仍使用 VideoWallpaper 名称；Muralop 从 v3.0.0 起使用新名称和包名。正式版发布前，可以从 [master 的 Actions 构建](https://github.com/sdutwsl/Muralop/actions/workflows/build.yml)下载构建产物。
+v2.2.0 及更早版本仍使用 VideoWallpaper 名称；Muralop 从 v3.0.0 起使用新名称和包名。正式版本见 [Releases](https://github.com/sdutwsl/Muralop/releases)，开发版构建见 [master 的 Actions](https://github.com/sdutwsl/Muralop/actions/workflows/build.yml)。
 
 ## 功能
 
@@ -212,6 +212,18 @@ audio_monitor=DP-1             # 哪个显示器出声，留空用主屏
 日常改动先累计在“未发布”中，整理新版本时再确定版本号，将本批条目移入对应版本标题并保留历史记录。提交、推送和正式版本发布是不同操作，不为每次提交自动增加版本号。
 
 ### 未发布
+
+#### Feature
+
+暂无。
+
+#### Fix
+
+暂无。
+
+### 3.0.0（2026-10-28）
+
+首个以 Muralop 名称发布的版本，从 VideoWallpaper v2.2.0 升级为新的应用与包名。
 
 #### Feature
 
