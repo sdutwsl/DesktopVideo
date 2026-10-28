@@ -30,7 +30,7 @@ const player = new PlayerPlugin(backend, processes);
 let window, browser, playback, youtubeSession, pollTimer, quitting = false;
 let browserError = '', browserBounds;
 let publishedPlaylist;
-let settings = { autoPlay: true, quality: '', extractor: '', browser: 'chrome', profile: '' };
+let settings = { quality: '', extractor: '', browser: 'chrome', profile: '' };
 let selectedMonitor = '', lastAuto = '', lastAutoAt = 0, importing = false;
 const labels = { connecting: '连接中', ready: '就绪', resolving: '解析中', loading: '加载中', playing: '播放中', paused: '已暂停', cancelled: '已取消', error: '失败' };
 
@@ -39,7 +39,7 @@ function publish(state = playback.state) {
   if (window && !window.isDestroyed()) {
     window.setTitle(`Muralop · ${label}${state.title ? ' · ' + state.title : ''}`);
     const payload = { ...state, settings, defaultExtractor, importing, browserError,
-      browserUrl: browser?.webContents.getURL(), browserLoading: browser?.webContents.isLoading() };
+      browserLoading: browser?.webContents.isLoading() };
     // A large collection is sent once, not with every status or navigation event.
     if (publishedPlaylist === state.playlist) delete payload.playlist;
     else publishedPlaylist = state.playlist;
@@ -75,7 +75,7 @@ async function play(source, monitor = selectedMonitor) {
 }
 function autoPlay(value) {
   const url = youtubeSource(value);
-  if (!settings.autoPlay || !url || (url === lastAuto && Date.now() - lastAutoAt < 2000)) return;
+  if (!url || (url === lastAuto && Date.now() - lastAutoAt < 2000)) return;
   lastAuto = url; lastAutoAt = Date.now();
   void play(url).catch(showError);
 }
@@ -136,6 +136,7 @@ app.on('activate', showWindow);
 if (!smoke && !app.requestSingleInstanceLock()) app.quit();
 else app.whenReady().then(async () => {
   try { settings = { ...settings, ...JSON.parse(await fs.readFile(path.join(app.getPath('userData'), 'settings.json'), 'utf8')) }; } catch { /* first launch */ }
+  delete settings.autoPlay;
   // Nix-managed extractor paths follow the bundled dependency after upgrades.
   if (settings.extractor.startsWith('/nix/store/')) settings.extractor = '';
   youtubeSession = session.fromPartition(smoke ? 'muralop-smoke' : 'persist:muralop-youtube');
@@ -169,16 +170,15 @@ else app.whenReady().then(async () => {
   window.contentView.addChildView(browser);
   wireBrowser(browser.webContents);
   browser.webContents.on('did-navigate-in-page', (_event, url, isMainFrame) => { if (isMainFrame) autoPlay(url); });
-  browser.webContents.on('did-finish-load', () => { browser.webContents.send('auto-play', settings.autoPlay); });
   for (const event of ['did-navigate', 'did-navigate-in-page', 'did-start-loading', 'did-stop-loading']) browser.webContents.on(event, () => publish());
   browser.webContents.on('did-start-loading', () => { browserError = ''; browser.setVisible(true); publish(); });
   browser.webContents.on('render-process-gone', (_event, details) => {
     if (quitting) return;
-    browserError = `网页进程已退出（${details.reason}），请点击刷新恢复。`;
+    browserError = `网页进程已退出（${details.reason}），可点击“重新加载网页”恢复。`;
     browser.setVisible(false);
     publish();
   });
-  browser.webContents.on('unresponsive', () => { browserError = '网页暂时没有响应，可以继续使用左侧控制，或点击刷新。'; publish(); });
+  browser.webContents.on('unresponsive', () => { browserError = '网页暂时没有响应，可以继续使用左侧控制，或点击“重新加载网页”。'; publish(); });
   browser.webContents.on('responsive', () => { browserError = ''; publish(); });
   browser.webContents.on('did-fail-load', (_event, code, description, _url, mainFrame) => {
     if (mainFrame && code !== -3) { browserError = '网页加载失败：' + description; publish(); }
@@ -206,7 +206,6 @@ else app.whenReady().then(async () => {
       switch (action) {
         case 'state': publishedPlaylist = undefined; publish(); return;
         case 'play': void play(String(value || '')).catch(showError); return;
-        case 'play-current': void play(browser.webContents.getURL()).catch(showError); return;
         case 'play-entry': void playback.playEntry(value, selectedMonitor, settings.quality).catch(showError); return;
         case 'cancel': void playback.cancel(); return;
         case 'connect': void playback.connect(); return;
@@ -224,14 +223,9 @@ else app.whenReady().then(async () => {
         case 'settings': {
           if (!value || typeof value !== 'object') return;
           for (const key of ['quality','extractor','browser','profile']) if (typeof value[key] === 'string') settings[key] = value[key];
-          if (typeof value.autoPlay === 'boolean') settings.autoPlay = value.autoPlay;
-          browser.webContents.send('auto-play', settings.autoPlay);
           await saveSettings(); publish(); return;
         }
-        case 'navigate': navigate(String(value || '')); return;
-        case 'back': if (browser.webContents.navigationHistory.canGoBack()) browser.webContents.navigationHistory.goBack(); return;
-        case 'forward': if (browser.webContents.navigationHistory.canGoForward()) browser.webContents.navigationHistory.goForward(); return;
-        case 'reload': browser.webContents.reload(); return;
+        case 'retry-browser': browser.webContents.reload(); return;
         case 'import-file': await importSession(true); return;
         case 'import-browser': await importSession(false); return;
         case 'clear-session': await clearSession(); return;

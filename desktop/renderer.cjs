@@ -15,7 +15,7 @@ window.muralop.onState(next => {
   $('play').disabled = !state.backendOnline;
   $('pause').textContent = state.paused ? '继续' : '暂停';
   $('mute').textContent = state.mute ? '取消静音' : '静音';
-  for (const id of ['pause','mute','volume','clear','play-current']) $(id).disabled = !state.backendOnline;
+  for (const id of ['pause','mute','volume','clear']) $(id).disabled = !state.backendOnline;
   for (const id of ['import-browser','import-file','clear-session']) $(id).disabled = state.importing;
   $('import-browser').textContent = state.importing ? '正在导入会话…' : '导入浏览器登录会话';
   if (document.activeElement !== $('volume')) { $('volume').value = state.volume; $('volume-value').textContent = state.volume; }
@@ -29,14 +29,12 @@ window.muralop.onState(next => {
   }
   if (!initialized && state.settings) {
     for (const id of ['quality','extractor','browser','profile']) $(id).value = state.settings[id] || '';
-    $('auto').checked = state.settings.autoPlay;
     $('extractor').placeholder = state.defaultExtractor || '使用内置解析器';
     initialized = true;
   }
-  if (state.browserUrl && document.activeElement !== $('address')) $('address').value = state.browserUrl;
-  $('reload').textContent = state.browserLoading ? '···' : '↻';
   $('browser-status').textContent = state.browserError || (state.browserLoading ? '正在加载网页…' : '网页已加载');
   $('browser-status').dataset.error = Boolean(state.browserError);
+  $('retry-browser').hidden = !state.browserError;
   const playlist = state.playlist;
   const key = playlist ? `${playlist.source}\n${playlist.entries.length}` : '';
   $('playlist-panel').hidden = !playlist;
@@ -68,13 +66,12 @@ for (const [id, offset] of [['previous-entry', -1], ['next-entry', 1]]) $(id).ad
   invoke('play-entry', Number($('playlist-entry').value));
 });
 $('play-form').addEventListener('submit', event => { event.preventDefault(); invoke('play', $('source').value); });
-$('navigation').addEventListener('submit', event => { event.preventDefault(); invoke('navigate', $('address').value); });
-for (const action of ['cancel','pause','mute','file','clear','connect','quit-ui','back','forward','reload','play-current','import-browser','import-file','clear-session']) $(action).addEventListener('click', () => invoke(action));
+for (const action of ['cancel','pause','mute','file','clear','connect','quit-ui','retry-browser','import-browser','import-file','clear-session']) $(action).addEventListener('click', () => invoke(action));
 $('monitor').addEventListener('change', () => invoke('monitor', $('monitor').value));
 $('volume').addEventListener('input', () => { $('volume-value').textContent = $('volume').value; });
 $('volume').addEventListener('change', () => invoke('volume', Number($('volume').value)));
-for (const id of ['auto','quality','extractor','browser','profile']) $(id).addEventListener('change', () => invoke('settings', {
-  autoPlay: $('auto').checked, quality: $('quality').value, extractor: $('extractor').value.trim(), browser: $('browser').value, profile: $('profile').value,
+for (const id of ['quality','extractor','browser','profile']) $(id).addEventListener('change', () => invoke('settings', {
+  quality: $('quality').value, extractor: $('extractor').value.trim(), browser: $('browser').value, profile: $('profile').value,
 }));
 let layoutFrame;
 const resize = () => {

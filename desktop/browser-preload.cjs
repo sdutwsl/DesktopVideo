@@ -1,8 +1,6 @@
 const { ipcRenderer } = require('electron');
-let autoPlay = true;
-ipcRenderer.on('auto-play', (_event, value) => { autoPlay = Boolean(value); });
 document.addEventListener('click', event => {
-  if (!autoPlay || !event.isTrusted || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  if (!event.isTrusted || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
   if (!['www.youtube.com', 'm.youtube.com'].includes(location.hostname)) return;
   const anchor = event.target.closest?.('a[href]');
   if (!anchor) return;
