@@ -20,7 +20,7 @@ class Diagnostics {
     } catch { /* first launch or an incomplete old diagnostic file */ }
     try {
       const hash = createHash('sha256');
-      for (const file of ['package.json', 'main.cjs', 'renderer.cjs', 'index.html', 'style.css', 'player.cjs', 'player-host.cjs', 'diagnostics.cjs', 'playback.cjs', 'media.cjs', 'sites.cjs', 'assets/muralop.png', 'assets/muralop@2x.png']) {
+      for (const file of ['package.json', 'main.cjs', 'renderer.cjs', 'index.html', 'style.css', 'player.cjs', 'player-host.cjs', 'tray-icon.cjs', 'diagnostics.cjs', 'playback.cjs', 'media.cjs', 'sites.cjs', 'assets/muralop.png', 'assets/muralop@2x.png']) {
         hash.update(file);
         hash.update(await fs.readFile(path.join(this.application.location, file)));
       }

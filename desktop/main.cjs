@@ -7,6 +7,7 @@ const { Processes, safeError } = require('./processes.cjs');
 const { PlayerPlugin } = require('./player.cjs');
 const { Playback } = require('./playback.cjs');
 const { Diagnostics } = require('./diagnostics.cjs');
+const { themeTrayIcon } = require('./tray-icon.cjs');
 const { sites, videoSite, isSiteVideo, videoSource } = require('./sites.cjs');
 const { youtubeSource, httpUrl, electronCookie, exportCookies, resolveMedia, resolvePlaylist } = require('./media.cjs');
 
@@ -38,6 +39,7 @@ const player = new PlayerPlugin({ pluginPath, configPath, legacyPath, version: a
   nodePath: locate('node', process.env.MURALOP_NODE) });
 let window, browser, playback, youtubeSession, pollTimer, quitting = false;
 let tray, diagnostics, trayState = '';
+let trayIconController;
 let mediaActions = Promise.resolve();
 const lastErrors = new Map();
 let browserError = '', browserBounds;
@@ -91,8 +93,8 @@ function updateTray(state) {
 }
 
 function createTray() {
-  // Reuse the original application artwork. Electron also loads the adjacent
-  // @2x PNG for high-density panels, preserving transparency and channel order.
+  // Show the original native tray's fallback immediately. On KDE, replace it
+  // with the user's themed wallpaper icon after the local renderer is ready.
   tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'assets', 'muralop.png')));
   tray.setToolTip('Muralop');
   tray.on('click', showWindow);
@@ -102,6 +104,7 @@ function createTray() {
 async function quitApplication() {
   if (quitting) return;
   quitting = true;
+  trayIconController?.abort();
   clearTimeout(pollTimer);
   clearTimeout(browserLoadTimer);
   playback?.close();
@@ -465,6 +468,13 @@ else app.whenReady().then(async () => {
     if (!quitting) void quitApplication();
   });
   await window.loadFile(path.join(__dirname, 'index.html'));
+  if (!smoke && !quitting) {
+    const target = tray;
+    trayIconController = new AbortController();
+    void themeTrayIcon(processes, window.webContents, trayIconController.signal).then(icon => {
+      if (icon && !quitting && tray === target && !target.isDestroyed()) target.setImage(icon);
+    }).catch(() => {});
+  }
   if (!args.includes('--background')) window.show();
   publish();
   if (smoke) {
