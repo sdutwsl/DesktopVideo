@@ -35,6 +35,8 @@ window.muralop.onState(next => {
   $('browser-status').textContent = state.browserError || (state.browserLoading ? '正在加载网页…' : '网页已加载');
   $('browser-status').dataset.error = Boolean(state.browserError);
   $('retry-browser').hidden = !state.browserError;
+  if (state.sites && !$('site').options.length) $('site').replaceChildren(...state.sites.map(site => new Option(site.name, site.id)));
+  if (state.settings) $('site').value = state.settings.site || 'youtube';
   const playlist = state.playlist;
   const key = playlist ? `${playlist.source}\n${playlist.entries.length}` : '';
   $('playlist-panel').hidden = !playlist;
@@ -68,6 +70,7 @@ for (const [id, offset] of [['previous-entry', -1], ['next-entry', 1]]) $(id).ad
 $('play-form').addEventListener('submit', event => { event.preventDefault(); invoke('play', $('source').value); });
 for (const action of ['cancel','pause','mute','file','clear','connect','quit-ui','retry-browser','import-browser','import-file','clear-session']) $(action).addEventListener('click', () => invoke(action));
 $('monitor').addEventListener('change', () => invoke('monitor', $('monitor').value));
+$('site').addEventListener('change', () => invoke('site', $('site').value));
 $('volume').addEventListener('input', () => { $('volume-value').textContent = $('volume').value; });
 $('volume').addEventListener('change', () => invoke('volume', Number($('volume').value)));
 for (const id of ['quality','extractor','browser','profile']) $(id).addEventListener('change', () => invoke('settings', {

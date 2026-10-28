@@ -1,13 +1,20 @@
 const { ipcRenderer } = require('electron');
+let sites = [];
+ipcRenderer.on('video-sites', (_event, value) => { sites = value; });
+ipcRenderer.send('video-sites-ready');
 document.addEventListener('click', event => {
   if (!event.isTrusted || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-  if (!['www.youtube.com', 'm.youtube.com'].includes(location.hostname)) return;
+  const matches = (host, domain) => host === domain || host.endsWith('.' + domain);
+  if (!sites.some(site => site.domains.some(domain => matches(location.hostname, domain)))) return;
   const anchor = event.target.closest?.('a[href]');
   if (!anchor) return;
   const url = new URL(anchor.href, location.href);
-  if (!['www.youtube.com', 'm.youtube.com'].includes(url.hostname)) return;
-  if (url.pathname !== '/watch' && url.pathname !== '/playlist' && !/^\/(shorts|live)\//.test(url.pathname)) return;
+  if (url.protocol !== 'https:' || url.username || url.password || url.port) return;
+  const site = sites.find(site => site.domains.some(domain => matches(url.hostname, domain)));
+  if (!site) return;
+  const short = ['youtu.be', 'b23.tv', 'v.douyin.com', 'vm.tiktok.com', 'vt.tiktok.com', 'dai.ly', 'clips.twitch.tv'].includes(url.hostname);
+  if (!(short ? /^\/[\w-]+\/?$/.test(url.pathname) : site.paths.some(pattern => new RegExp(pattern).test(url.pathname + url.search)))) return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  ipcRenderer.send('youtube-play', url.href);
+  ipcRenderer.send('video-play', url.href);
 }, true);

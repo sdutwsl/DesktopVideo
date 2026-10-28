@@ -1,4 +1,4 @@
-"""Cookie conversion and YouTube URL validation, independent of the GUI toolkit."""
+"""Scoped site cookie conversion and legacy YouTube URL validation."""
 
 from __future__ import annotations
 
@@ -52,10 +52,17 @@ def cookie_record(cookie: http.cookiejar.Cookie) -> dict:
     }
 
 
-def read_cookie_file(path: str) -> list[dict]:
+def scoped_domain(domain: str, domains: list[str] | None) -> bool:
+    if domains is None:
+        return session_domain(domain)
+    host = domain.lstrip(".").lower()
+    return any(host == root or host.endswith("." + root) for root in domains)
+
+
+def read_cookie_file(path: str, domains: list[str] | None = None) -> list[dict]:
     jar = http.cookiejar.MozillaCookieJar(path)
     jar.load(ignore_discard=True, ignore_expires=True)
-    return [cookie_record(c) for c in jar if session_domain(c.domain) and (not c.expires or c.expires > time.time())]
+    return [cookie_record(c) for c in jar if scoped_domain(c.domain, domains) and (not c.expires or c.expires > time.time())]
 
 
 class QuietLogger:
@@ -65,16 +72,16 @@ class QuietLogger:
     def error(self, *_args, **_kwargs): pass
 
 
-def read_browser_cookies(browser: str, profile: str = "") -> list[dict]:
+def read_browser_cookies(browser: str, profile: str = "", domains: list[str] | None = None) -> list[dict]:
     from yt_dlp import YoutubeDL
 
     if browser not in ("chrome", "edge", "firefox", "chromium", "brave"):
         raise ValueError("Unsupported browser")
     # yt-dlp performs the OS-specific extraction. Never log or persist other sites.
     with YoutubeDL({"cookiesfrombrowser": (browser, profile or None, None, None), "logger": QuietLogger()}) as ydl:
-        records = [cookie_record(c) for c in ydl.cookiejar if session_domain(c.domain) and not c.is_expired()]
-    if not any(youtube_domain(c["domain"]) for c in records):
-        raise RuntimeError("没有读到 YouTube 会话。请确认浏览器已登录；Chrome/Edge 的加密可能阻止导入，可改用 cookies.txt。")
+        records = [cookie_record(c) for c in ydl.cookiejar if scoped_domain(c.domain, domains) and not c.is_expired()]
+    if not records or domains is None and not any(youtube_domain(c["domain"]) for c in records):
+        raise RuntimeError("没有读到目标站点的登录会话。请确认浏览器已登录；Chrome/Edge 的加密可能阻止导入，可改用 cookies.txt。")
     return records
 
 
@@ -112,9 +119,10 @@ if __name__ == "__main__":
     parser.add_argument("--browser")
     parser.add_argument("--profile", default="")
     parser.add_argument("--cookie-file")
+    parser.add_argument("--domain", action="append", help="Only import cookies for these site domains")
     arguments = parser.parse_args()
     try:
-        records = read_cookie_file(arguments.cookie_file) if arguments.cookie_file else read_browser_cookies(arguments.browser, arguments.profile)
+        records = read_cookie_file(arguments.cookie_file, arguments.domain) if arguments.cookie_file else read_browser_cookies(arguments.browser, arguments.profile, arguments.domain)
         # This pipe is private to the desktop main process, never the webpage.
         sys.stdout.reconfigure(encoding="utf-8")
         print(json.dumps(records, ensure_ascii=False))

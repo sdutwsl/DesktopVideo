@@ -52,8 +52,10 @@ function sessionDomain(domain) {
 // Converts an imported cookie record into Electron's cookies.set() details.
 // A leading dot marks a domain cookie; without it the cookie is host-only, and
 // Chromium rejects __Host- cookies that carry a domain or a path other than "/".
-function electronCookie(record) {
-  if (!sessionDomain(record.domain)) return null;
+function electronCookie(record, domains) {
+  const domain = record.domain.replace(/^\./, '').toLowerCase();
+  const allowed = domains ? domains.some(root => domain === root || domain.endsWith('.' + root)) : sessionDomain(record.domain);
+  if (!allowed) return null;
   const host = record.domain.replace(/^\./, '');
   const hostPrefix = record.name.startsWith('__Host-');
   const path = hostPrefix ? '/' : record.path || '/';
@@ -68,11 +70,11 @@ function electronCookie(record) {
   return cookie;
 }
 
-async function exportCookies(filename, records) {
+async function exportCookies(filename, records, domains = ['youtube.com']) {
   const rows = ['# Netscape HTTP Cookie File'];
   for (const c of records) {
     const domain = c.domain.replace(/^\./, '').toLowerCase();
-    if (domain !== 'youtube.com' && !domain.endsWith('.youtube.com')) continue;
+    if (!domains.some(root => domain === root || domain.endsWith('.' + root))) continue;
     const fields = [c.domain, c.domain.startsWith('.') ? 'TRUE' : 'FALSE', c.path || '/', c.secure ? 'TRUE' : 'FALSE',
       String(Math.floor(c.expirationDate || 0)), c.name, c.value];
     if (fields.some(value => /[\r\n\t\0]/.test(value))) continue;
@@ -92,7 +94,7 @@ function extractorError(error) {
   if (error.name === 'AbortError') return error;
   const text = String(error.message);
   if (/not a bot|confirm your age|Sign in to confirm|LOGIN_REQUIRED/i.test(text))
-    return new Error('YouTube 要求登录后才能解析这个视频。请在右侧网页登录 YouTube，或在“登录会话与播放设置”里导入浏览器登录会话，然后重试。');
+    return new Error('该站点要求登录后才能解析这个视频。请在右侧网页中登录，或在“登录会话与播放设置”里导入浏览器登录会话，然后重试。');
   return new Error(text.replace(/^ERROR:\s*(\[\w+\]\s*[\w-]+:\s*)?/, '解析失败：'));
 }
 
@@ -104,7 +106,10 @@ async function resolveMedia(processes, extractor, source, { cookies, quality = '
   let output;
   try { output = await processes.run(extractor, args, { signal, timeout: 60000 }); }
   catch (error) { throw extractorError(error); }
-  const data = JSON.parse(output);
+  let data = JSON.parse(output);
+  // Some extractors (e.g. multi-part Bilibili videos) return a collection even
+  // with --no-playlist. Resolve one actual entry instead of treating its cover as media.
+  if (data.entries) data = data.entries.find(entry => entry && (entry.url || entry.requested_formats || entry.requested_downloads)) || {};
   const formats = data.requested_formats || data.requested_downloads || [data];
   const video = formats.find(item => item.vcodec && item.vcodec !== 'none') || formats.find(item => item.url);
   const audio = formats.find(item => item.acodec && item.acodec !== 'none' && item !== video);

@@ -18,7 +18,7 @@
     </section>
     <form id="play-form">
       <label for="monitor">播放到</label><select id="monitor"><option value="">所有显示器（默认视频）</option></select>
-      <label for="source">视频来源</label><input id="source" placeholder="粘贴 YouTube / 视频网址" autocomplete="off">
+      <label for="source">视频来源</label><input id="source" placeholder="粘贴 B站、YouTube 等视频网址" autocomplete="off">
       <button id="play" class="primary" type="submit">播放到桌面</button>
     </form>
     <section id="playlist-panel" hidden>
@@ -41,7 +41,7 @@
     <footer><span>独立视频播放核心</span><button id="connect">重连</button><button id="quit-ui" title="退出界面，壁纸继续播放">退出界面</button></footer>
   </aside>
   <main>
-    <div class="browser-header"><h2>YouTube</h2><p id="playback-summary" aria-live="polite">点击视频，播放到桌面</p></div>
+    <div class="browser-header"><select id="site" aria-label="视频站点"></select><p id="playback-summary" aria-live="polite">点击视频，播放到桌面</p></div>
     <p id="browser-status" role="status">正在加载网页…</p>
     <button id="retry-browser" hidden>重新加载网页</button>
     <div id="browser-slot"><span>正在加载网页…</span></div>

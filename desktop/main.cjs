@@ -6,6 +6,7 @@ const { pathToFileURL } = require('node:url');
 const { Processes, safeError } = require('./processes.cjs');
 const { PlayerPlugin } = require('./player.cjs');
 const { Playback } = require('./playback.cjs');
+const { sites, videoSite, isSiteVideo, videoSource } = require('./sites.cjs');
 const { youtubeSource, httpUrl, electronCookie, exportCookies, resolveMedia, resolvePlaylist } = require('./media.cjs');
 
 app.setName('Muralop');
@@ -30,7 +31,8 @@ const player = new PlayerPlugin(backend, processes);
 let window, browser, playback, youtubeSession, pollTimer, quitting = false;
 let browserError = '', browserBounds;
 let publishedPlaylist;
-let settings = { quality: '', extractor: '', browser: 'chrome', profile: '' };
+let settings = { quality: '', extractor: '', browser: 'chrome', profile: '', site: 'youtube' };
+const activeSite = () => sites.find(site => site.id === settings.site) || sites[0];
 let selectedMonitor = '', lastAuto = '', lastAutoAt = 0, importing = false;
 const labels = { connecting: '连接中', ready: '就绪', resolving: '解析中', loading: '加载中', playing: '播放中', paused: '已暂停', cancelled: '已取消', error: '失败' };
 
@@ -38,7 +40,7 @@ function publish(state = playback.state) {
   const label = labels[state.phase] || state.phase;
   if (window && !window.isDestroyed()) {
     window.setTitle(`Muralop · ${label}${state.title ? ' · ' + state.title : ''}`);
-    const payload = { ...state, settings, defaultExtractor, importing, browserError,
+    const payload = { ...state, settings, sites: sites.map(({ id, name }) => ({ id, name })), defaultExtractor, importing, browserError,
       browserLoading: browser?.webContents.isLoading() };
     // A large collection is sent once, not with every status or navigation event.
     if (publishedPlaylist === state.playlist) delete payload.playlist;
@@ -74,7 +76,7 @@ async function play(source, monitor = selectedMonitor) {
   await playback.play(source, monitor, settings.quality);
 }
 function autoPlay(value) {
-  const url = youtubeSource(value);
+  const url = youtubeSource(value) || videoSource(value);
   if (!url || (url === lastAuto && Date.now() - lastAutoAt < 2000)) return;
   lastAuto = url; lastAutoAt = Date.now();
   void play(url).catch(showError);
@@ -82,10 +84,16 @@ function autoPlay(value) {
 
 function wireBrowser(contents) {
   contents.setAudioMuted(true);
-  contents.on('will-navigate', (event, url) => { if (!allowNavigation(url)) event.preventDefault(); });
-  contents.setWindowOpenHandler(({ url }) => ({ action: allowNavigation(url) ? 'allow' : 'deny',
-    overrideBrowserWindowOptions: { parent: window, width: 650, height: 800,
-      webPreferences: { partition: 'persist:muralop-youtube', nodeIntegration: false, contextIsolation: true, sandbox: true } } }));
+  contents.on('will-navigate', (event, url) => {
+    if (!allowNavigation(url)) event.preventDefault();
+    else if (videoSite(contents.getURL()) && isSiteVideo(url)) { event.preventDefault(); autoPlay(url); }
+  });
+  contents.setWindowOpenHandler(({ url }) => {
+    if (videoSite(contents.getURL()) && isSiteVideo(url)) { autoPlay(url); return { action: 'deny' }; }
+    return { action: allowNavigation(url) ? 'allow' : 'deny',
+      overrideBrowserWindowOptions: { parent: window, width: 650, height: 800,
+        webPreferences: { partition: 'persist:muralop-youtube', nodeIntegration: false, contextIsolation: true, sandbox: true } } };
+  });
   contents.on('did-create-window', popup => { wireBrowser(popup.webContents); });
 }
 
@@ -102,32 +110,38 @@ async function importSession(fromFile) {
   try {
     const helper = process.env.MURALOP_SESSION_HELPER || locate('muralop-session');
     const params = file ? ['--cookie-file', file] : ['--browser', settings.browser, '--profile', settings.profile];
+    const site = activeSite();
+    const domains = [...site.domains, ...(site.loginDomains || [])];
+    for (const domain of domains) params.push('--domain', domain);
     const records = JSON.parse(await processes.run(helper, params, { timeout: 20000, maxBytes: 2 * 1024 * 1024 }));
     let count = 0;
-    const cookies = records.map(electronCookie).filter(Boolean);
-    if (!cookies.length) throw new Error('没有读到可用的 YouTube 登录会话');
+    const cookies = records.map(record => electronCookie(record, domains)).filter(Boolean);
+    if (!cookies.length) throw new Error(`没有读到可用的 ${site.name} 登录会话`);
     // Replace the session instead of mixing it with an existing login: two
     // Google sessions in one jar make Google refuse to sign in.
-    await youtubeSession.clearStorageData({ storages: ['cookies'] });
+    for (const cookie of await youtubeSession.cookies.get({})) {
+      if (electronCookie({ ...cookie, expires: cookie.expirationDate }, domains))
+        await youtubeSession.cookies.remove(`https://${cookie.domain.replace(/^\./, '')}${cookie.path || '/'}`, cookie.name);
+    }
     let skipped = 0;
     for (const cookie of cookies) {
       // One cookie Chromium refuses must not abort the rest of the session.
       try { await youtubeSession.cookies.set(cookie); count++; } catch { skipped++; }
     }
     if (!count) throw new Error('浏览器不接受导入的登录会话');
-    navigate('https://www.youtube.com/');
+    navigate(site.home);
     playback.update({ message: `已导入 ${count} 条登录会话${skipped ? `（跳过 ${skipped} 条浏览器不接受的 Cookie）` : ''}，登录状态以网页显示为准。` });
   } finally { importing = false; publish(); }
 }
 
 async function clearSession() {
   const { response } = await dialog.showMessageBox(window, { type: 'question', buttons: ['清除', '取消'], defaultId: 1, cancelId: 1,
-    message: '清除内嵌网页的登录会话？', detail: '会退出内嵌网页中的 YouTube 和 Google 登录，之后需要重新登录或导入。' });
+    message: '清除内嵌网页的登录会话？', detail: '会退出所有内嵌站点的登录，之后需要重新登录或导入。' });
   if (response !== 0) return;
   await youtubeSession.clearStorageData();
   await youtubeSession.clearCache();
   await fs.rm(path.join(app.getPath('userData'), 'youtube-cookies.txt'), { force: true });
-  navigate('https://www.youtube.com/');
+  navigate(activeSite().home);
   playback.update({ message: '已清除登录会话，可以在网页中重新登录或导入。' });
 }
 
@@ -148,7 +162,7 @@ else app.whenReady().then(async () => {
   youtubeSession.on('will-download', event => event.preventDefault());
   const prepareResolver = async (quality, signal) => {
     const cookieFile = path.join(app.getPath('userData'), 'youtube-cookies.txt');
-    await exportCookies(cookieFile, await youtubeSession.cookies.get({}));
+    await exportCookies(cookieFile, await youtubeSession.cookies.get({}), sites.flatMap(site => site.domains));
     // The backend falls back to its own yt-dlp hook when it restarts without
     // the UI; keep that path on the same login session and quality.
     // Nix store paths change on upgrade; the Nix backend has its own yt-dlp on PATH.
@@ -196,9 +210,13 @@ else app.whenReady().then(async () => {
     browserBounds = next;
     browser.setBounds(next);
   });
-  ipcMain.on('youtube-play', (event, value) => {
+  ipcMain.on('video-sites-ready', event => {
+    if (event.sender === browser.webContents && event.senderFrame === browser.webContents.mainFrame)
+      event.sender.send('video-sites', sites);
+  });
+  ipcMain.on('video-play', (event, value) => {
     if (event.sender !== browser.webContents || event.senderFrame !== browser.webContents.mainFrame) return;
-    try { if (['www.youtube.com','m.youtube.com'].includes(new URL(browser.webContents.getURL()).hostname)) autoPlay(value); } catch { /* no loaded page */ }
+    if (videoSite(browser.webContents.getURL())) autoPlay(value);
   });
   ipcMain.handle('muralop', async (event, action, value) => {
     if (!trusted(event)) throw new Error('Untrusted IPC sender');
@@ -224,6 +242,13 @@ else app.whenReady().then(async () => {
           if (!value || typeof value !== 'object') return;
           for (const key of ['quality','extractor','browser','profile']) if (typeof value[key] === 'string') settings[key] = value[key];
           await saveSettings(); publish(); return;
+        }
+        case 'site': {
+          const site = sites.find(site => site.id === value);
+          if (!site) throw new Error('未知的视频站点');
+          settings.site = site.id;
+          await saveSettings();
+          navigate(site.home); publish(); return;
         }
         case 'retry-browser': browser.webContents.reload(); return;
         case 'import-file': await importSession(true); return;
@@ -260,7 +285,7 @@ else app.whenReady().then(async () => {
       catch (error) { console.error(safeError(error.message)); app.exit(1); }
     }, 1500);
   } else {
-    navigate('https://www.youtube.com/');
+    navigate(activeSite().home);
     void playback.connect();
     // Each poll starts a short-lived RPC process: poll quickly only while a task is pending.
     const poll = async () => {

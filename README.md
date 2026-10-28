@@ -20,7 +20,7 @@ v2.2.0 及更早版本仍使用 VideoWallpaper 名称；Muralop 从 v3.0.0 起�
 - 循环播放、按屏幕比例裁切铺满
 - 锁屏、休眠时暂停，关机前退出
 - 托盘 / 菜单栏菜单：选择视频、暂停、静音、退出；Linux 另有命令行 / D-Bus 控制，macOS 菜单里可以设置登录时启动
-- Linux 和 Windows x64 可选主界面：内嵌 YouTube 浏览、网址播放、显示器选择和登录会话导入
+- Linux 和 Windows x64 可选主界面：内嵌 YouTube、B站、抖音、TikTok、Vimeo、Dailymotion、Twitch 浏览，支持 yt-dlp 站点网址播放、显示器选择和登录会话导入
 - 配置持久化（`key=value` 文本文件）
 
 ## Linux（Wayland）

@@ -1,5 +1,6 @@
 const { EventEmitter } = require('node:events');
 const { httpUrl, youtubeVideo, youtubeSource, youtubePlaylist } = require('./media.cjs');
+const { videoSource } = require('./sites.cjs');
 const { safeError, abortError } = require('./processes.cjs');
 
 // The core retries stalled CDN connections itself; allow for a few of them.
@@ -61,7 +62,10 @@ class Playback extends EventEmitter {
   }
 
   async play(source, monitor = '', quality = '') {
-    source = youtubeSource(source) || String(source || '').trim();
+    source = String(source || '').trim();
+    // Share sheets often copy a caption together with the actual video URL.
+    if (!httpUrl(source) && /https?:\/\//.test(source)) source = source.match(/https?:\/\/[^\s<>"，。]+/)[0];
+    source = youtubeSource(source) || videoSource(source) || source;
     if (!source) throw new Error('先选择视频或输入网址');
     if (!this.state.backendOnline) throw new Error('请先连接播放后端');
     const previous = this.job;
