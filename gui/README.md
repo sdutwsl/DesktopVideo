@@ -1,4 +1,6 @@
-# 主界面与 YouTube
+# 旧版 Qt 界面（存档）
+
+以下仅用于维护旧的 PySide6 / Qt WebEngine 界面。当前应用入口为 `desktop/`，使用与构建说明见 [项目文档](../README.md)。
 
 运行 `muralop-ui.exe`（Windows）或 `muralop-ui`（Linux）。程序会启动同目录的壁纸后端。
 关闭主界面后视频继续播放，从托盘的“打开主界面”可以再次打开；退出壁纸请使用托盘的“退出”。
@@ -24,7 +26,7 @@ Windows Chrome/Edge 的数据库占用、应用绑定加密可能阻止读取，
 
 ## 开发运行
 
-先按根目录 README 构建 C++ 后端，然后：
+先按 [原生播放器构建说明](../docs/development.md#独立原生播放器) 构建程序，然后：
 
 ```sh
 python -m venv .venv
