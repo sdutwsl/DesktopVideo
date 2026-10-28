@@ -5,7 +5,7 @@ if(CMAKE_HOST_APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET 13.0 CACHE STRING "Minimum macOS version")
 endif()
 # The single version number: the Nix package reads it from here, and release tags must be v<VERSION>.
-project(Muralop VERSION 3.0.0 LANGUAGES C CXX)
+project(Muralop VERSION 3.0.1 LANGUAGES C CXX)
 add_compile_definitions("MURALOP_VERSION=\"${PROJECT_VERSION}\"")
 
 set(CMAKE_CXX_STANDARD 20)

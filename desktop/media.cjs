@@ -129,16 +129,18 @@ async function resolvePlaylist(processes, extractor, source, { cookies, signal, 
   if (cookies) args.push('--cookies', cookies);
   args.push('--', source);
   const entries = [];
-  let title = '视频合集', timer, received = false;
+  let title = '视频合集', timer, received = false, position = 0;
   const snapshot = complete => ({ source, title, entries: entries.slice(), complete });
   const publish = () => { timer = null; onUpdate?.(snapshot(false)); };
   const append = entry => {
+    const index = Number(entry?.playlist_index);
+    position = Number.isSafeInteger(index) && index > 0 ? index : position + 1;
     if (!entry || ['private', 'unavailable'].includes(entry.availability)) return;
     const url = youtubeVideo(entry.webpage_url) || youtubeVideo(entry.url)
       || (/^[\w-]{11}$/.test(entry.id || '') ? `https://www.youtube.com/watch?v=${entry.id}` : null);
     if (!url) return;
     if (entry.playlist_title) title = entry.playlist_title;
-    entries.push({ source: url, title: entry.title || `视频 ${entries.length + 1}`, index: entry.playlist_index || entries.length + 1 });
+    entries.push({ source: url, title: entry.title || `视频 ${position}`, index: position });
     if (entries.length === 1) publish();
     else if (!timer) timer = setTimeout(publish, 250);
   };
