@@ -1,8 +1,11 @@
-// Only this application-owned utility process loads native code.
+// Only this application-owned host loads native code. Linux uses a plain Node
+// runtime so Chromium's FFmpeg symbols and allocator cannot interpose libmpv.
 const { safeError } = require('./processes.cjs');
 let player;
+const port = process.parentPort;
+const send = value => port ? port.postMessage(value) : process.send?.(value);
 
-process.parentPort.on('message', ({ data }) => {
+function receive(data) {
   const { id, method, value } = data || {};
   if (!Number.isInteger(id)) return;
   try {
@@ -18,9 +21,15 @@ process.parentPort.on('message', ({ data }) => {
       player?.close();
       result = { ok: true };
     } else throw new Error('未知播放操作');
-    process.parentPort.postMessage({ id, result });
+    send({ id, result });
     if (method === 'close') setImmediate(() => process.exit(0));
-  } catch (error) { process.parentPort.postMessage({ id, error: safeError(error.message) }); }
-});
+  } catch (error) { send({ id, error: safeError(error.message) }); }
+}
 
-process.parentPort.on('close', () => process.exit(0));
+if (port) {
+  port.on('message', ({ data }) => receive(data));
+  port.on('close', () => process.exit(0));
+} else {
+  process.on('message', receive);
+  process.on('disconnect', () => process.exit(0));
+}

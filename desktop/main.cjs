@@ -34,7 +34,8 @@ const legacyPath = portableConfig || option('--config') || option('--data-dir') 
 const defaultExtractor = locate('yt-dlp', process.env.MURALOP_YTDLP);
 process.env.PATH = binaryDir + path.delimiter + process.env.PATH;
 const processes = new Processes();
-const player = new PlayerPlugin({ pluginPath, configPath, legacyPath, version: app.getVersion() });
+const player = new PlayerPlugin({ pluginPath, configPath, legacyPath, version: app.getVersion(),
+  nodePath: locate('node', process.env.MURALOP_NODE) });
 let window, browser, playback, youtubeSession, pollTimer, quitting = false;
 let tray, diagnostics, trayState = '';
 const lastErrors = new Map();

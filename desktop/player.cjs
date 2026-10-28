@@ -1,4 +1,5 @@
 const { utilityProcess } = require('electron');
+const { fork } = require('node:child_process');
 const { EventEmitter } = require('node:events');
 const path = require('node:path');
 const { abortError, safeError } = require('./processes.cjs');
@@ -6,9 +7,9 @@ const { abortError, safeError } = require('./processes.cjs');
 // One persistent Node-API plugin host, owned by this application. Driver crashes
 // cannot take the window down, and status polling never spawns RPC clients.
 class PlayerPlugin extends EventEmitter {
-  constructor({ pluginPath, configPath, legacyPath, version }) {
+  constructor({ pluginPath, configPath, legacyPath, version, nodePath }) {
     super();
-    Object.assign(this, { pluginPath, configPath, legacyPath, version });
+    Object.assign(this, { pluginPath, configPath, legacyPath, version, nodePath });
     this.pending = new Map();
     this.sequence = 0;
     this.closed = false;
@@ -39,7 +40,11 @@ class PlayerPlugin extends EventEmitter {
       this.pending.set(id, { finish });
       signal?.addEventListener('abort', cancel, { once: true });
       if (signal?.aborted) { cancel(); return; }
-      try { child.postMessage({ id, method, value }); }
+      try {
+        const message = { id, method, value };
+        if (typeof child.postMessage === 'function') child.postMessage(message);
+        else child.send(message, error => { if (error) this.fail(child, error); });
+      }
       catch (error) { this.fail(child, error); }
     });
   }
@@ -48,13 +53,20 @@ class PlayerPlugin extends EventEmitter {
     if (this.closed || signal?.aborted) throw abortError();
     if (this.starting) { await this.starting; return this.request('status', [], signal); }
     if (this.child) return this.request('status', [], signal);
-    const child = utilityProcess.fork(path.join(__dirname, 'player-host.cjs'), [], {
-      serviceName: 'Muralop Playback', stdio: 'pipe',
-    });
+    const host = path.join(__dirname, 'player-host.cjs');
+    // Electron's utility processes still load Chromium's libffmpeg. On Linux
+    // use the application's bundled Node runtime to isolate the entire native
+    // dependency graph, including its allocator, rather than deep-binding it.
+    const environment = { ...process.env };
+    delete environment.ELECTRON_RUN_AS_NODE;
+    const child = process.platform === 'linux'
+      ? fork(host, [], { execPath: this.nodePath || 'node', execArgv: [], env: environment, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] })
+      : utilityProcess.fork(host, [], { serviceName: 'Muralop Playback', stdio: 'pipe' });
     this.child = child;
     let errors = '';
     child.stdout?.on('data', () => {});
     child.stderr?.on('data', chunk => { errors = (errors + chunk.toString()).slice(-4096); });
+    child.on('error', error => this.fail(child, new Error('无法启动播放宿主：' + safeError(error.message))));
     child.on('message', message => {
       if (this.child !== child || !message || !Number.isInteger(message.id)) return;
       const pending = this.pending.get(message.id);
@@ -62,8 +74,8 @@ class PlayerPlugin extends EventEmitter {
       if (message.error) this.fail(child, new Error(safeError(message.error)));
       else pending.finish(null, message.result);
     });
-    child.on('exit', code => this.fail(child,
-      new Error(`播放插件异常退出（${code}）${errors ? '：' + safeError(errors) : ''}，可点击“重启播放”。`)));
+    child.on('exit', (code, signal) => this.fail(child,
+      new Error(`播放插件异常退出（${signal || code}）${errors ? '：' + safeError(errors).trim() : ''}，可点击“重启播放”。`)));
     this.starting = this.call('start', { pluginPath: this.pluginPath, configPath: this.configPath,
       legacyPath: this.legacyPath }, signal, 15000).then(result => {
       if (result.version !== this.version) throw new Error('应用文件版本不一致，请使用同一构建中的完整应用包。');

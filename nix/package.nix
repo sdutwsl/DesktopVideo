@@ -94,6 +94,7 @@ stdenv.mkDerivation {
     makeWrapper ${electron}/bin/electron $out/bin/muralop-ui \
       --add-flags "$out/share/muralop/desktop" \
       --set MURALOP_PLAYER_PLUGIN $out/share/muralop/desktop/muralop.node \
+      --set MURALOP_NODE ${nodejs}/bin/node \
       --prefix PATH : ${lib.makeBinPath [ youtubeDlp deno ]} \
       --set MURALOP_YTDLP ${youtubeDlp}/bin/yt-dlp \
       --set MURALOP_SESSION_HELPER $out/bin/muralop-session

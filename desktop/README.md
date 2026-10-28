@@ -9,7 +9,7 @@
 播放、状态切换和控件操作带有轻量动效，窗口隐藏或最小化时暂停界面动画；系统请求减少动态效果时关闭动画。
 单视频解析和播放器加载各有 60 秒上限；合集列表连续 60 秒没有新输出会超时（播放核心会自动重试中断的视频连接），可以随时点击取消。重新选择视频会取消上一个播放任务；选择同一合集已有条目时复用后台列表读取。
 
-网页、解析任务和播放均由应用管理。原生插件加载于 Electron utility process，渲染运行在专用线程；每次查询状态不再创建 RPC 子进程。解析和插件请求可以取消与超时。
+网页、解析任务和播放均由应用管理。原生插件加载于应用拥有的宿主进程，渲染运行在专用线程；每次查询状态不再创建 RPC 子进程。解析和插件请求可以取消与超时。
 最小化或点击关闭按钮会保留网页、浏览位置和当前播放任务；关闭按钮隐藏到托盘，再次打开沿用原窗口。
 应用只创建一个托盘和其中唯一的“退出”入口，退出会结束插件、窗口、网页和解析任务；插件停止超过 3 秒则终止其宿主进程。
 播放插件崩溃或失去响应时保留窗口和托盘，显示原因并提供“重启播放”；继续使用 `hwdec=auto-safe`，没有改为软解。
@@ -46,7 +46,7 @@ NixOS 可直接运行：
 nix run . -- ui
 ```
 
-本地插件构建与运行见 [仓库构建流程](../README.md#开发与构建流程)。开发时通过 `--player-plugin /absolute/path/to/muralop.node` 或 `MURALOP_PLAYER_PLUGIN` 指定插件；完整包默认从应用目录加载。
+本地插件构建与运行见 [仓库构建流程](../README.md#开发与构建流程)。开发时通过 `--player-plugin /absolute/path/to/muralop.node` 或 `MURALOP_PLAYER_PLUGIN` 指定插件；完整包默认从应用目录加载。Linux 的 `MURALOP_NODE` 可指定纯 Node 运行时；Nix 已设置，便携包已携带，源码开发时默认使用 PATH 中的 `node`。
 需要可运行的 yt-dlp 2026.10.21 和 Deno。可以通过 `MURALOP_YTDLP` 指定解析器，或在界面设置路径。
 开发环境的会话导入可使用 `MURALOP_SESSION_HELPER` 指向已打包的 `muralop-session`；Nix 和便携包已包含该工具。
 
@@ -57,13 +57,14 @@ python -m pip install -r desktop/requirements.txt pyinstaller
 python desktop/package.py --player-dir build/desktop
 ```
 
-该目录必须包含 CMake 生成的 `muralop.node` 和 `package.json`，Windows 还需 `libmpv-2.dll`。打包不再复制独立播放程序。
+该目录必须包含 CMake 生成的 `muralop.node` 和 `package.json`，Windows 还需 `libmpv-2.dll`。Linux 打包时还会复制当前构建环境的纯 Node 可执行文件为 `node`；不再复制独立播放程序。
 
 ## 原生播放插件
 
-`src/node/PlayerAddon.cpp` 导出 `start(configPath, legacyPath)`、`request(command)` 和 `close()`。这些同步 Node-API 入口只在专用 utility process 中调用，不阻塞应用窗口。插件内部将命令排到原生渲染线程，所有显示器、mpv 实例和平台连接均在该线程创建、使用和释放。
+`src/node/PlayerAddon.cpp` 导出 `start(configPath, legacyPath)`、`request(command)` 和 `close()`。这些同步 Node-API 入口只在专用宿主进程中调用，不阻塞应用窗口。插件内部将命令排到原生渲染线程，所有显示器、mpv 实例和平台连接均在该线程创建、使用和释放。
 
 `desktop/player.cjs` 统一管理插件宿主、请求取消和超时；启动上限 15 秒，普通请求 4 秒，退出清理 3 秒。`desktop/player-host.cjs` 只负责加载模块和传递结果；应用退出时一并回收宿主。
+Linux 通过随应用提供的纯 Node 运行时及 Node IPC 加载插件，隔离 Electron 内置 FFmpeg 的同名符号和内存分配器；不直接在 Electron 中加载 libmpv，也不对整个依赖树进行深度绑定。Windows 继续使用 Electron utility process。两者共用相同的插件命令接口和退出清理。
 
 内部命令复用 `AppControl`：`status`、`play-resolved`、`set`、`stop`、`online`、`pause`、`resume`、`mute`、`unmute`、`volume`、`clear`、`quit`。命令参数使用换行分隔，返回 JSON；这是插件内的调用格式，不再由外部 `muralop rpc` 转发。
 `status` 返回显示器、音量、暂停状态、错误和 `playback`（`idle`、`loading`、`playing`、`error`）。`play-resolved` 依次接收原始网址、视频流网址、音频流网址、User-Agent、Referer、显示器。配置只保存原始网址；签名流地址只在播放期间驻留内存。

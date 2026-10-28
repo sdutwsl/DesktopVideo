@@ -127,7 +127,7 @@ master 每次提交的构建在 [Actions](https://github.com/sdutwsl/Muralop/act
 
 ## 主界面（Linux / Windows）
 
-应用基于 Electron，通过 `muralop.node` 调用现有 C++/libmpv 播放能力，统一管理窗口、托盘和退出。插件在应用拥有的 utility process 中加载，渲染运行于专用线程；驱动崩溃时窗口保留，可重启播放。解析视频时界面保持可操作，可随时取消（本次重构待构建和实播验证）。
+应用基于 Electron，通过 `muralop.node` 调用现有 C++/libmpv 播放能力，统一管理窗口、托盘和退出。插件在应用拥有的宿主进程中加载（Linux 使用随包提供的纯 Node，Windows 使用 Electron utility process），渲染运行于专用线程；驱动崩溃时窗口保留，可重启播放。解析视频时界面保持可操作，可随时取消（本次重构待构建和实播验证）。
 Linux 可通过 Nix 包中的 `muralop-ui` 启动；也可在 Ubuntu 26.04 下载 `muralop-v*-linux-gui-x64.tar.gz`，解压后运行 `muralop-ui/muralop-ui`。Linux GUI 归档内的播放插件依赖 Ubuntu 26.04 的 libmpv、Wayland、EGL 和 sdbus-c++ 2；Nix 包会管理这些依赖。Ubuntu 默认限制非特权用户命名空间，解压后需执行一次 `sudo chown root:root muralop-ui/chrome-sandbox && sudo chmod 4755 muralop-ui/chrome-sandbox`，否则 Chromium 沙箱无法启动。Windows 使用上文的 GUI zip。关闭按钮将主界面隐藏到托盘，保留网页和当前任务；最小化或再次打开不会重新加载网页。使用托盘中的“退出”同时结束壁纸播放和主界面。
 
 在内嵌网页浏览支持的视频平台，点击视频可直接设为桌面壁纸；也可以粘贴视频网址，给不同显示器指定不同视频。点击后界面和窗口标题依次显示 **解析中**、**加载中**、**播放中**，失败时显示原因。合集会列出全部可用视频，可以选择其中任意视频播放。YouTube 可能要求登录后才能解析：可在内嵌网页直接登录，或从浏览器、`cookies.txt` 导入登录会话。具体操作、Cookie 保存位置和开发运行方式见 [主界面说明](desktop/README.md)。macOS 目前没有这个主界面。
@@ -201,6 +201,7 @@ audio_monitor=DP-1             # 哪个显示器出声，留空用主屏
 
 #### Fix
 
+- Linux 使用应用提供的纯 Node 宿主加载播放插件，避免与 Electron 内置 FFmpeg 的同名符号冲突，修复 mpv 在库版本检查中直接退出的问题；硬解策略保持不变（已通过初始化、状态查询和退出定点诊断，整包及实播待验证）。
 - 将新增播放插件及运行时模块纳入 Git 跟踪，修复本地 `nix run . -- ui` 因 flake 源码缺少 `src/node` 而无法求值的问题（完整构建待验证）。
 - 保留窗口隐藏、最小化前的网页与播放任务，恢复窗口时沿用原网页。
 - 完整应用统一由 Electron 提供一个托盘，播放插件不再创建第二个托盘（待运行验证）。
@@ -239,11 +240,11 @@ Muralop 按一个应用打包：Electron 管理窗口、网页、托盘和生命
 | 浏览器登录会话导入 | `gui/session.py` | Nix Python 包装器或 PyInstaller | `muralop-session` |
 | 独立原生播放器与命令行 | `src/core/`、平台目录 | CMake + Ninja | `muralop` / `muralop.exe` / `Muralop.app` |
 
-应用入口为 `desktop/main.cjs`。CJS、HTML、CSS 直接复制进包，没有 `npm run build`。`desktop/player-host.cjs` 在 Electron 的 utility process 中加载 `.node`，插件内部将命令交给渲染线程执行；界面不再启动 `muralop --background` 或 `muralop rpc`。独立原生播放器仍用于不带 Electron 的发行包，macOS 继续使用原生外壳。
+应用入口为 `desktop/main.cjs`。CJS、HTML、CSS 直接复制进包，没有 `npm run build`。`desktop/player-host.cjs` 在应用拥有的宿主进程中加载 `.node`：Linux 使用纯 Node 运行时，Windows 使用 Electron utility process，插件内部将命令交给渲染线程执行；界面不再启动 `muralop --background` 或 `muralop rpc`。独立原生播放器仍用于不带 Electron 的发行包，macOS 继续使用原生外壳。
 
-**Nix 构建链路：** `flake.nix` → `nix/package.nix` → CMake 编译 `.node` → 安装 `desktop/` 源码和生成的版本元数据 → 包装 Electron、yt-dlp、Deno、会话导入工具。包装器指定同一个包内的插件；完整包的 `muralop` 默认入口转入这个应用，`nix run . -- ui` 也打开同一个入口。应用改动必须进入该包的源码集合，不能向消费仓库添加临时补丁。
+**Nix 构建链路：** `flake.nix` → `nix/package.nix` → CMake 编译 `.node` → 安装 `desktop/` 源码和生成的版本元数据 → 包装 Electron、Node、yt-dlp、Deno、会话导入工具。包装器通过 `MURALOP_NODE` 指定同一包依赖的 Node 运行时，并指定包内的插件；完整包的 `muralop` 默认入口转入这个应用，`nix run . -- ui` 也打开同一个入口。应用改动必须进入该包的源码集合，不能向消费仓库添加临时补丁。
 
-**便携包构建链路：** `.github/workflows/build.yml` 先在 Ubuntu / Windows 构建中启用 `MURALOP_BUILD_NODE_PLUGIN`，GUI 任务取得 `.node` 和生成的 `package.json`，运行 `python desktop/package.py --player-dir player`。脚本将 Electron、应用源码、播放插件、会话导入工具、yt-dlp 和 Deno 组装进 `dist/gui/muralop-ui/`；Windows 同时包含 `libmpv-2.dll`，最终归档为 zip 或 tar.gz。GUI 包无需单独的 `muralop` 播放程序。
+**便携包构建链路：** `.github/workflows/build.yml` 先在 Ubuntu / Windows 构建中启用 `MURALOP_BUILD_NODE_PLUGIN`，GUI 任务取得 `.node` 和生成的 `package.json`，运行 `python desktop/package.py --player-dir player`。脚本将 Electron、应用源码、播放插件、会话导入工具、yt-dlp 和 Deno 组装进 `dist/gui/muralop-ui/`；Linux 同时包含构建环境的纯 Node 可执行文件 `node`，Windows 同时包含 `libmpv-2.dll`，最终归档为 zip 或 tar.gz。GUI 包无需单独的 `muralop` 播放程序。
 
 本地开发使用与当前平台对应的 Node 头文件和 libmpv；Linux 还需前述 Wayland 依赖。在 Nix 开发环境中：
 
@@ -256,7 +257,7 @@ npm ci --prefix desktop
 npm start --prefix desktop -- --player-plugin "$PWD/build/desktop/muralop.node"
 ```
 
-这里使用稳定的 Node-API v8，不直接依赖 V8 接口；Windows 从当前 Electron 可执行文件解析 Node-API 符号。加载和崩溃隔离使用 [Electron utilityProcess](https://www.electronjs.org/docs/latest/api/utility-process)。默认只做源码修改，不主动执行上述构建、测试或发布命令。
+这里使用稳定的 Node-API v8，不直接依赖 V8 接口；Windows 从当前 Electron 可执行文件解析 Node-API 符号。Linux 使用纯 Node 的进程 IPC，Windows 使用 [Electron utilityProcess](https://www.electronjs.org/docs/latest/api/utility-process)；两者均由应用创建和回收。默认只做源码修改，不主动执行上述构建、测试或发布命令。
 
 完成修改后，同步更新上面的 Fix / Feature 清单，可以创建本地提交。新增源码必须加入 Git 跟踪，否则本地 Git flake 的 `nix run .` 会遗漏这些文件。每次推送仍需当次明确要求；允许本地提交不代表允许推送。明确要求推送后，将实际修改的源码、相关打包文件和变更清单完整提交，再推送到 `origin/master`，并给出提交号。推送会触发上述 CI，生成各平台构建产物；日常修复无需打版本 tag。
 

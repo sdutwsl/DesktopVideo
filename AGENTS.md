@@ -23,7 +23,8 @@
 
 - 当前主界面是 `desktop/` 下的 Electron 应用，入口为 `desktop/main.cjs`；`gui/main.py` 是旧 Qt 界面。
 - 按一个应用设计和描述功能，不向用户拆分所谓前端、后端或两套版本。
-- 播放插件入口为 `src/node/PlayerAddon.cpp`，复用 `src/core/` 和平台表面；`desktop/player-host.cjs` 在应用拥有的 utility process 中加载 `.node`，内部专用线程负责原生渲染。
+- 播放插件入口为 `src/node/PlayerAddon.cpp`，复用 `src/core/` 和平台表面；`desktop/player-host.cjs` 在应用拥有的宿主进程中加载 `.node`，内部专用线程负责原生渲染。Linux 使用随包提供的纯 Node 运行时，Windows 使用 Electron utility process。
+- Linux 不得直接在 Electron（包括 utility process）中加载 libmpv，也不得通过深度绑定整个插件来绕过冲突：Electron 的 FFmpeg 符号和内存分配器会干扰原生依赖。Nix 通过 `MURALOP_NODE` 指定运行时，Linux 便携包必须包含 `node`。
 - 应用统一提供一个 Electron 托盘和其中唯一的退出入口；GUI 不得再通过启动独立 `muralop --background` 或反复运行 `muralop rpc` 驱动播放。独立原生发行包保留自己的外壳。
 - 修改插件接口或打包方式时，同步调整 CMake、Nix 和便携包/CI 产物路径，防止源码修改未进入实际安装包。
 - 新增应用源码必须加入 Git 跟踪；本地 Git flake 的 `nix run .` 不包含未跟踪文件，不能只修改 Nix 源码集合却遗漏对应的新文件。

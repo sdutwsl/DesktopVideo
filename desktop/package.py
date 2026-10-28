@@ -21,12 +21,15 @@ def main():
     if not (player / "muralop.node").is_file():
         parser.error("muralop.node is missing; build with -DMURALOP_BUILD_NODE_PLUGIN=ON first")
     metadata = json.loads((player / "package.json").read_text(encoding="utf-8"))
-    executable = Path(subprocess.check_output(["node", "-p", "require('electron')"], cwd=ROOT / "desktop", text=True).strip())
+    runtime = json.loads(subprocess.check_output(["node", "-p", "JSON.stringify({electron:require('electron'),node:process.execPath})"], cwd=ROOT / "desktop", text=True))
+    executable = Path(runtime["electron"])
     bundle = ROOT / "dist/gui/muralop-ui"
     if bundle.exists():
         shutil.rmtree(bundle)
     shutil.copytree(executable.parent, bundle)
     (bundle / executable.name).rename(bundle / ("muralop-ui" + suffix))
+    if sys.platform == "linux":
+        shutil.copy2(runtime["node"], bundle / "node")
     app_dir = bundle / "resources/app"
     app_dir.mkdir(parents=True, exist_ok=True)
     for pattern in ("*.cjs", "*.html", "*.css", "package.json"):

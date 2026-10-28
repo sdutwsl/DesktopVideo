@@ -1,5 +1,5 @@
-// Stable Node-API entry point. Electron loads this in its playback utility
-// process; every desktop surface and mpv handle belongs to the render thread.
+// Stable Node-API entry point, loaded in the application's playback host.
+// Every desktop surface and mpv handle belongs to the render thread.
 #ifdef _WIN32
 // Resolve Node-API from the host executable, including Electron's renamed exe.
 // This avoids linking a node.exe import library into an Electron addon.
