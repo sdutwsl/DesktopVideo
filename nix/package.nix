@@ -87,6 +87,7 @@ stdenv.mkDerivation {
   postInstall = ''
     mkdir -p $out/share/muralop/desktop
     cp $src/desktop/{*.cjs,*.html,*.css} $out/share/muralop/desktop/
+    cp -r $src/desktop/assets $out/share/muralop/desktop/
     cp desktop/package.json $out/share/muralop/desktop/
     cp $src/gui/session.py $out/share/muralop/
   '';

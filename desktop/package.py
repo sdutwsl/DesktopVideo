@@ -35,6 +35,7 @@ def main():
     for pattern in ("*.cjs", "*.html", "*.css", "package.json"):
         for source in (ROOT / "desktop").glob(pattern):
             shutil.copy2(source, app_dir)
+    shutil.copytree(ROOT / "desktop/assets", app_dir / "assets")
     (app_dir / "package.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     shutil.copy2(player / "muralop.node", app_dir)
     work = ROOT / "build-electron"

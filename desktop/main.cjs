@@ -89,15 +89,9 @@ function updateTray(state) {
 }
 
 function createTray() {
-  // 32px BGRA tile with a play triangle; no platform-specific icon dependency.
-  const pixels = Buffer.alloc(32 * 32 * 4);
-  for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
-    const edge = Math.max(0, 5 - x, x - 26) ** 2 + Math.max(0, 5 - y, y - 26) ** 2;
-    if (edge > 25) continue;
-    const triangle = x >= 12 && x <= 23 && Math.abs(y - 15.5) <= (23 - x) * .72;
-    pixels.set(triangle ? [238, 250, 246, 255] : [143, 181, 72, 255], (y * 32 + x) * 4);
-  }
-  tray = new Tray(nativeImage.createFromBitmap(pixels, { width: 32, height: 32 }));
+  // Reuse the original application artwork. Electron also loads the adjacent
+  // @2x PNG for high-density panels, preserving transparency and channel order.
+  tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'assets', 'muralop.png')));
   tray.setToolTip('Muralop');
   tray.on('click', showWindow);
   updateTray(playback.state);
